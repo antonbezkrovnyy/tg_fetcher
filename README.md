@@ -64,29 +64,67 @@ python-tg/
 
 ## 🧪 Development
 
-### Run Tests
+### Using Development Scripts
 
-```bash
-pytest
+We provide helper scripts for common development tasks:
+
+**Windows (PowerShell):**
+```powershell
+.\scripts\dev.ps1 <command>
 ```
 
-### Format Code
+**Linux/Mac:**
+```bash
+chmod +x scripts/dev.sh
+./scripts/dev.sh <command>
+```
 
+**Available commands:**
+- `test` - Run tests
+- `test-cov` - Run tests with coverage report
+- `format` - Format code with black and isort
+- `lint` - Run flake8 linter
+- `type-check` - Run mypy type checker
+- `audit` - Check dependencies for vulnerabilities
+- `check-all` - Run all checks (format, lint, type-check, test, audit)
+- `clean` - Clean up cache files and build artifacts
+- `install` - Install development dependencies
+- `help` - Show help message
+
+### Manual Commands
+
+If you prefer to run commands manually:
+
+**Run Tests:**
+```bash
+pytest
+# With coverage
+pytest --cov=src --cov-report=html
+```
+
+**Format Code:**
 ```bash
 black .
 isort .
 ```
 
-### Type Checking
-
+**Type Checking:**
 ```bash
 mypy src/
 ```
 
-### Linting
-
+**Linting:**
 ```bash
 flake8 src/
+```
+
+**Security Audit:**
+```bash
+# On Windows, set UTF-8 first
+$env:PYTHONUTF8=1; pip-audit
+
+# On Linux/Mac
+pip-audit
 ```
 
 ## 📝 License
