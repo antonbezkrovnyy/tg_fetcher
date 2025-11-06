@@ -1,12 +1,13 @@
 """
 Graceful shutdown and healthcheck utilities
 """
-import signal
+
 import asyncio
+import json
 import logging
 import os
-import json
-from datetime import datetime, UTC
+import signal
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Optional
 
@@ -50,10 +51,10 @@ def request_shutdown(signum=None, frame=None):
     logger.warning(
         f"Shutdown requested via signal {signal_name}",
         extra={
-            'signal': signal_name,
-            'signal_number': signum,
-            'current_task': _current_task
-        }
+            "signal": signal_name,
+            "signal_number": signum,
+            "current_task": _current_task,
+        },
     )
 
     if _current_task:
@@ -84,13 +85,13 @@ async def shutdown_with_timeout(coro, timeout: int = 30):
     except asyncio.TimeoutError:
         logger.error(
             f"Graceful shutdown timed out after {timeout}s",
-            extra={'timeout_seconds': timeout}
+            extra={"timeout_seconds": timeout},
         )
     except Exception as e:
         logger.error(
             f"Error during graceful shutdown: {e}",
-            extra={'error_type': type(e).__name__},
-            exc_info=True
+            extra={"error_type": type(e).__name__},
+            exc_info=True,
         )
 
 
@@ -98,7 +99,7 @@ def update_healthcheck(
     status: str = "healthy",
     current_task: Optional[str] = None,
     last_success: Optional[datetime] = None,
-    error: Optional[str] = None
+    error: Optional[str] = None,
 ):
     """
     Update healthcheck file
@@ -111,16 +112,16 @@ def update_healthcheck(
     """
     try:
         health_data = {
-            'status': status,
-            'timestamp': datetime.now(UTC).isoformat(),
-            'current_task': current_task,
-            'last_success': last_success.isoformat() if last_success else None,
-            'error': error,
-            'pid': os.getpid()
+            "status": status,
+            "timestamp": datetime.now(UTC).isoformat(),
+            "current_task": current_task,
+            "last_success": last_success.isoformat() if last_success else None,
+            "error": error,
+            "pid": os.getpid(),
         }
 
         HEALTHCHECK_FILE.parent.mkdir(parents=True, exist_ok=True)
-        with open(HEALTHCHECK_FILE, 'w') as f:
+        with open(HEALTHCHECK_FILE, "w") as f:
             json.dump(health_data, f, indent=2)
 
     except Exception as e:
@@ -130,18 +131,12 @@ def update_healthcheck(
 
 def mark_healthy():
     """Mark service as healthy"""
-    update_healthcheck(
-        status="healthy",
-        last_success=datetime.now(UTC)
-    )
+    update_healthcheck(status="healthy", last_success=datetime.now(UTC))
 
 
 def mark_error(error_message: str):
     """Mark service as having an error"""
-    update_healthcheck(
-        status="error",
-        error=error_message
-    )
+    update_healthcheck(status="error", error=error_message)
 
 
 def check_health() -> dict:
@@ -151,29 +146,23 @@ def check_health() -> dict:
     """
     try:
         if not HEALTHCHECK_FILE.exists():
-            return {
-                'status': 'unknown',
-                'message': 'No healthcheck file found'
-            }
+            return {"status": "unknown", "message": "No healthcheck file found"}
 
-        with open(HEALTHCHECK_FILE, 'r') as f:
+        with open(HEALTHCHECK_FILE, "r") as f:
             data = json.load(f)
 
         # Check if healthcheck is recent (within last 5 minutes)
-        timestamp = datetime.fromisoformat(data['timestamp'])
+        timestamp = datetime.fromisoformat(data["timestamp"])
         age_seconds = (datetime.now(UTC) - timestamp).total_seconds()
 
         if age_seconds > 300:  # 5 minutes
-            data['status'] = 'stale'
-            data['age_seconds'] = age_seconds
+            data["status"] = "stale"
+            data["age_seconds"] = age_seconds
 
         return data
 
     except Exception as e:
-        return {
-            'status': 'error',
-            'message': f'Failed to read healthcheck: {e}'
-        }
+        return {"status": "error", "message": f"Failed to read healthcheck: {e}"}
 
 
 # Create healthcheck script for Docker

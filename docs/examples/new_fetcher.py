@@ -8,8 +8,10 @@ import asyncio
 import sys
 from pathlib import Path
 
-from config import load_config, FetchMode
 from fetcher_service import FetcherService
+
+from config import FetchMode, load_config
+
 
 async def main():
     """Main entry point for continuous fetching."""
@@ -39,6 +41,7 @@ async def main():
         return 1
 
     return 0
+
 
 if __name__ == "__main__":
     exit_code = asyncio.run(main())

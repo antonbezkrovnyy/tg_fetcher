@@ -6,34 +6,52 @@ Centralizes all metrics and logging configuration.
 import logging
 from typing import Optional
 
+
 # Fallback classes for missing observability modules
 class MockLogger:
     """Fallback logger when real logging is unavailable."""
-    def debug(self, *args, **kwargs): pass
+
+    def debug(self, *args, **kwargs):
+        pass
+
     def info(self, msg, *args, **kwargs):
         print(f"INFO: {msg}")
+
     def warning(self, msg, *args, **kwargs):
         print(f"WARNING: {msg}")
+
     def error(self, msg, *args, **kwargs):
         print(f"ERROR: {msg}")
 
 
 class MockCounter:
     """Fallback counter metric."""
-    def labels(self, *args, **kwargs): return self
-    def inc(self, amount=1): pass
+
+    def labels(self, *args, **kwargs):
+        return self
+
+    def inc(self, amount=1):
+        pass
 
 
 class MockHistogram:
     """Fallback histogram metric."""
-    def labels(self, *args, **kwargs): return self
-    def observe(self, value): pass
+
+    def labels(self, *args, **kwargs):
+        return self
+
+    def observe(self, value):
+        pass
 
 
 class MockGauge:
     """Fallback gauge metric."""
-    def labels(self, *args, **kwargs): return self
-    def set(self, value): pass
+
+    def labels(self, *args, **kwargs):
+        return self
+
+    def set(self, value):
+        pass
 
 
 class MockMetricsExporter:
@@ -72,8 +90,9 @@ class MockMetricsExporter:
 
 # Try to import real observability modules with fallbacks
 try:
+    from observability.logging import get_logger, setup_logging
     from observability.metrics import MetricsExporter
-    from observability.logging import setup_logging, get_logger
+
     OBSERVABILITY_AVAILABLE = True
 except ImportError:
     MetricsExporter = MockMetricsExporter
@@ -106,32 +125,31 @@ class StandardMetrics:
 
         # Core metrics
         self.messages_fetched = self.exporter.create_counter(
-            'telegram_messages_fetched_total',
-            'Total number of fetched messages',
-            labelnames=['channel']
+            "telegram_messages_fetched_total",
+            "Total number of fetched messages",
+            labelnames=["channel"],
         )
 
         self.channels_processed = self.exporter.create_counter(
-            'telegram_channels_processed_total',
-            'Total number of processed channels'
+            "telegram_channels_processed_total", "Total number of processed channels"
         )
 
         self.fetch_errors = self.exporter.create_counter(
-            'telegram_fetch_errors_total',
-            'Number of fetch errors',
-            labelnames=['channel', 'error_type']
+            "telegram_fetch_errors_total",
+            "Number of fetch errors",
+            labelnames=["channel", "error_type"],
         )
 
         self.fetch_duration = self.exporter.create_histogram(
-            'telegram_fetch_duration_seconds',
-            'Time spent fetching messages (seconds)',
-            labelnames=['channel']
+            "telegram_fetch_duration_seconds",
+            "Time spent fetching messages (seconds)",
+            labelnames=["channel"],
         )
 
         self.last_fetch_timestamp = self.exporter.create_gauge(
-            'telegram_last_fetch_timestamp',
-            'Last successful fetch timestamp (Unix time)',
-            labelnames=['channel']
+            "telegram_last_fetch_timestamp",
+            "Last successful fetch timestamp (Unix time)",
+            labelnames=["channel"],
         )
 
     def record_messages_fetched(self, channel: str, count: int):

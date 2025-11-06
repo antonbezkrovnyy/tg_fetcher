@@ -329,9 +329,7 @@ class FetcherService:
 
         try:
             # Get discussion message if channel has linked discussion group
-            if isinstance(entity, Channel) and hasattr(
-                message.replies, "channel_id"
-            ):
+            if isinstance(entity, Channel) and hasattr(message.replies, "channel_id"):
                 # Limit to 50 comments per message to prevent hanging
                 comment_count = 0
                 async for comment in client.iter_messages(

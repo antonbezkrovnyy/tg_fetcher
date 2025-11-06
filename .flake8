@@ -19,6 +19,8 @@ exclude =
     .mypy_cache,
     .pytest_cache,
     .tox,
+    docs/examples,
+    scripts,
 per-file-ignores =
     __init__.py:F401,D104
 max-complexity = 10

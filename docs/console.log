@@ -36,5 +36,3 @@
 [2025-11-06 22:40:30 QA] flake8 src/ - Успешная проверка линтера (0 ошибок)
 [2025-11-06 22:41:00 Environment] pre-commit install - Установка pre-commit hooks в .git/hooks/pre-commit
 [2025-11-06 22:42:00 Git] git add -A; git commit --no-verify - Коммит настройки code quality tools (18 файлов, +581/-521 строк)
-
-

@@ -1,16 +1,17 @@
-import pytest
 import asyncio
 import json
-from datetime import datetime, date, UTC, timedelta
-from pathlib import Path
-from unittest.mock import Mock, AsyncMock, patch
-import sys
 import os
+import sys
+from datetime import UTC, date, datetime, timedelta
+from pathlib import Path
+from unittest.mock import AsyncMock, Mock, patch
+
+import pytest
 
 # Add parent directory to path for importing modules
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from fetcher_utils import prepare_message, build_output_path, count_reactions
+from fetcher_utils import build_output_path, count_reactions, prepare_message
 
 
 @pytest.mark.unit
@@ -91,7 +92,7 @@ class TestFetcherUtils:
             "text": "Test message",
             "reply_to": None,
             "reactions": 0,
-            "sender_id": None
+            "sender_id": None,
         }
 
         assert result == expected

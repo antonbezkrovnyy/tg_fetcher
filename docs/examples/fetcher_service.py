@@ -6,23 +6,28 @@ This module implements the Strategy pattern to handle different fetching modes:
 - Yesterday-only fetching (just previous day)
 """
 
-import os
-import json
 import asyncio
+import json
+import os
 import time
 from abc import ABC, abstractmethod
-from datetime import datetime, timedelta, UTC, date
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
-from typing import List, Optional, Dict, Any
+from typing import Any, Dict, List, Optional
+
+# Use common observability module
+from common_observability import (
+    OBSERVABILITY_AVAILABLE,
+    StandardMetrics,
+    get_logger_safe,
+    setup_logging_safe,
+)
+from fetcher_utils import build_output_path, prepare_message, save_json
+from retry_utils import RateLimiter, retry_on_error_enhanced
+from session_manager import SessionManager
 from telethon import TelegramClient
 
 from config import FetcherConfig, FetchMode
-from fetcher_utils import prepare_message, build_output_path, save_json
-from retry_utils import retry_on_error_enhanced, RateLimiter
-
-# Use common observability module
-from common_observability import StandardMetrics, get_logger_safe, setup_logging_safe, OBSERVABILITY_AVAILABLE
-from session_manager import SessionManager
 
 
 def load_progress(progress_file: Path) -> Dict[str, str]:
@@ -31,7 +36,7 @@ def load_progress(progress_file: Path) -> Dict[str, str]:
         return {}
 
     try:
-        with open(progress_file, 'r', encoding='utf-8') as f:
+        with open(progress_file, "r", encoding="utf-8") as f:
             return json.load(f)
     except (json.JSONDecodeError, IOError):
         return {}
@@ -42,7 +47,7 @@ def save_progress(progress_file: Path, progress_data: Dict[str, str]) -> None:
     progress_file.parent.mkdir(parents=True, exist_ok=True)
 
     try:
-        with open(progress_file, 'w', encoding='utf-8') as f:
+        with open(progress_file, "w", encoding="utf-8") as f:
             json.dump(progress_data, f, ensure_ascii=False, indent=2)
     except IOError as e:
         print(f"Warning: Could not save progress: {e}")
@@ -51,7 +56,7 @@ def save_progress(progress_file: Path, progress_data: Dict[str, str]) -> None:
 class FetchStrategy(ABC):
     """Abstract base class for different fetching strategies."""
 
-    def __init__(self, service: 'FetcherService'):
+    def __init__(self, service: "FetcherService"):
         self.service = service
 
     @abstractmethod
@@ -104,7 +109,9 @@ class ContinuousFetchStrategy(FetchStrategy):
 
                 for fetch_date in dates_to_fetch:
                     try:
-                        messages_count = await self.service.fetch_day(client, channel, fetch_date)
+                        messages_count = await self.service.fetch_day(
+                            client, channel, fetch_date
+                        )
 
                         # Update progress
                         progress_data = load_progress(self.service.config.progress_file)
@@ -112,11 +119,15 @@ class ContinuousFetchStrategy(FetchStrategy):
                         save_progress(self.service.config.progress_file, progress_data)
 
                         # Record metrics
-                        self.service.metrics.record_messages_fetched(channel, messages_count)
+                        self.service.metrics.record_messages_fetched(
+                            channel, messages_count
+                        )
 
                     except Exception as e:
                         print(f"Error processing {channel} for {fetch_date}: {e}")
-                        self.service.metrics.record_fetch_error(channel, type(e).__name__)
+                        self.service.metrics.record_fetch_error(
+                            channel, type(e).__name__
+                        )
                         continue
 
 
@@ -139,10 +150,14 @@ class YesterdayFetchStrategy(FetchStrategy):
                 print(f"\n=== Processing {channel} for {yesterday} ===")
 
                 try:
-                    messages_count = await self.service.fetch_day(client, channel, yesterday)
+                    messages_count = await self.service.fetch_day(
+                        client, channel, yesterday
+                    )
 
                     # Record metrics
-                    self.service.metrics.record_messages_fetched(channel, messages_count)
+                    self.service.metrics.record_messages_fetched(
+                        channel, messages_count
+                    )
                     self.service.metrics.record_channel_processed()
 
                     print(f"✓ Processed {channel}: {messages_count} messages")
@@ -165,7 +180,9 @@ class FetcherService:
         self.metrics = StandardMetrics()
 
         # Initialize rate limiter
-        self.rate_limiter = RateLimiter(calls_per_second=config.rate_limit.calls_per_second)
+        self.rate_limiter = RateLimiter(
+            calls_per_second=config.rate_limit.calls_per_second
+        )
 
         # Setup logging and session manager
         setup_logging_safe()
@@ -187,7 +204,9 @@ class FetcherService:
             return ContinuousFetchStrategy(self)
 
     @retry_on_error_enhanced(max_attempts=3, backoff_factor=2.0)
-    async def fetch_day(self, client: TelegramClient, channel_username: str, day_date: date) -> int:
+    async def fetch_day(
+        self, client: TelegramClient, channel_username: str, day_date: date
+    ) -> int:
         """Fetch messages from a single day for a channel/chat and save them into a JSON file.
 
         Args:
@@ -216,8 +235,10 @@ class FetcherService:
             senders = {}
 
             # Fetch messages
-            async for msg in client.iter_messages(entity, offset_date=end, reverse=False):
-                if not getattr(msg, 'date', None):
+            async for msg in client.iter_messages(
+                entity, offset_date=end, reverse=False
+            ):
+                if not getattr(msg, "date", None):
                     continue
 
                 msg_date = msg.date
@@ -227,12 +248,12 @@ class FetcherService:
                     break
 
                 # Track senders
-                if getattr(msg, 'sender', None) and getattr(msg.sender, 'id', None):
+                if getattr(msg, "sender", None) and getattr(msg.sender, "id", None):
                     sender_id = msg.sender.id
                     sender_name = (
-                        getattr(msg.sender, 'first_name', '') or
-                        getattr(msg.sender, 'title', '') or
-                        'Unknown User'
+                        getattr(msg.sender, "first_name", "")
+                        or getattr(msg.sender, "title", "")
+                        or "Unknown User"
                     )
                     senders[sender_id] = sender_name
 
@@ -242,7 +263,7 @@ class FetcherService:
                     messages.append(processed_msg)
 
             # Save results - build path manually with specific date
-            safe_name = channel_username.lstrip('@')
+            safe_name = channel_username.lstrip("@")
             if any(kw in channel_username for kw in ("chat", "beginners")):
                 output_dir = self.data_dir / "chats"
             else:

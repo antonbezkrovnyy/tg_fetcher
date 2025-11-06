@@ -5,8 +5,9 @@ Handles session paths, naming, and client creation consistently.
 
 import os
 from pathlib import Path
-from telethon import TelegramClient
 from typing import Union
+
+from telethon import TelegramClient
 
 from config import FetcherConfig
 
@@ -30,42 +31,40 @@ class SessionManager:
         """Create configured Telegram client."""
         session_path = str(self.get_session_path())
 
-        return TelegramClient(
-            session_path,
-            self.config.api_id,
-            self.config.api_hash
-        )
+        return TelegramClient(session_path, self.config.api_id, self.config.api_hash)
 
     def session_exists(self) -> bool:
         """Check if session file exists."""
-        session_file = self.get_session_path().with_suffix('.session')
+        session_file = self.get_session_path().with_suffix(".session")
         return session_file.exists()
 
     def delete_session(self):
         """Delete session file (for cleanup/reset)."""
-        session_file = self.get_session_path().with_suffix('.session')
+        session_file = self.get_session_path().with_suffix(".session")
         if session_file.exists():
             session_file.unlink()
 
     def get_session_info(self) -> dict:
         """Get information about current session."""
-        session_file = self.get_session_path().with_suffix('.session')
+        session_file = self.get_session_path().with_suffix(".session")
 
         info = {
-            'session_path': str(self.get_session_path()),
-            'session_file': str(session_file),
-            'exists': session_file.exists(),
-            'session_dir': str(self.session_dir),
-            'session_name': self.session_name
+            "session_path": str(self.get_session_path()),
+            "session_file": str(session_file),
+            "exists": session_file.exists(),
+            "session_dir": str(self.session_dir),
+            "session_name": self.session_name,
         }
 
-        if info['exists']:
+        if info["exists"]:
             stat = session_file.stat()
-            info.update({
-                'size_bytes': stat.st_size,
-                'modified_time': stat.st_mtime,
-                'created_time': stat.st_ctime
-            })
+            info.update(
+                {
+                    "size_bytes": stat.st_size,
+                    "modified_time": stat.st_mtime,
+                    "created_time": stat.st_ctime,
+                }
+            )
 
         return info
 
@@ -77,7 +76,9 @@ def get_legacy_session_path() -> str:
     return "/sessions/session_digest"
 
 
-def create_client_legacy(api_id: int, api_hash: str, session_path: str = None) -> TelegramClient:
+def create_client_legacy(
+    api_id: int, api_hash: str, session_path: str = None
+) -> TelegramClient:
     """Create client using legacy parameters."""
     if session_path is None:
         session_path = get_legacy_session_path()

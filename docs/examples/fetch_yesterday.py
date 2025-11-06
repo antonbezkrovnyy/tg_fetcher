@@ -1,23 +1,24 @@
-import os
-import json
 import asyncio
+import json
+import os
 import time
-from datetime import datetime, timedelta, UTC, date
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
+
 from dotenv import load_dotenv
+from fetcher_utils import build_output_path, prepare_message, save_json
+from retry_utils import RateLimiter, handle_flood_wait, retry_on_error
+from shutdown_utils import (
+    create_healthcheck_script,
+    is_shutdown_requested,
+    mark_error,
+    mark_healthy,
+    set_current_task,
+    setup_signal_handlers,
+)
 from telethon import TelegramClient
 
-from fetcher_utils import prepare_message, build_output_path, save_json
-from observability.logging import setup_logging, get_logger
-from retry_utils import retry_on_error, handle_flood_wait, RateLimiter
-from shutdown_utils import (
-    setup_signal_handlers,
-    is_shutdown_requested,
-    set_current_task,
-    mark_healthy,
-    mark_error,
-    create_healthcheck_script
-)
+from observability.logging import get_logger, setup_logging
 from observability.metrics import MetricsExporter
 
 load_dotenv()
@@ -32,78 +33,85 @@ try:
     # Используем context manager для батчинга push
     metrics = MetricsExporter()
     messages_fetched_total = metrics.create_counter(
-        'telegram_messages_fetched_total',
-        'Общее количество загруженных сообщений',
-        labelnames=['channel']
+        "telegram_messages_fetched_total",
+        "Общее количество загруженных сообщений",
+        labelnames=["channel"],
     )
     channels_processed_total = metrics.create_counter(
-        'telegram_channels_processed_total',
-        'Общее количество обработанных каналов'
+        "telegram_channels_processed_total", "Общее количество обработанных каналов"
     )
     fetch_errors_total = metrics.create_counter(
-        'telegram_fetch_errors_total',
-        'Количество ошибок при загрузке',
-        labelnames=['channel', 'error_type']
+        "telegram_fetch_errors_total",
+        "Количество ошибок при загрузке",
+        labelnames=["channel", "error_type"],
     )
     fetch_duration_seconds = metrics.create_histogram(
-        'telegram_fetch_duration_seconds',
-        'Время загрузки сообщений (секунды)',
-        labelnames=['channel']
+        "telegram_fetch_duration_seconds",
+        "Время загрузки сообщений (секунды)",
+        labelnames=["channel"],
     )
     last_fetch_timestamp = metrics.create_gauge(
-        'telegram_last_fetch_timestamp',
-        'Timestamp последней успешной загрузки',
-        labelnames=['channel']
+        "telegram_last_fetch_timestamp",
+        "Timestamp последней успешной загрузки",
+        labelnames=["channel"],
     )
     current_progress_date = metrics.create_gauge(
-        'telegram_current_progress_date',
-        'Текущая дата прогресса (Unix timestamp)',
-        labelnames=['channel']
+        "telegram_current_progress_date",
+        "Текущая дата прогресса (Unix timestamp)",
+        labelnames=["channel"],
     )
     # Дополнительные метрики качества данных (по доступным полям)
     reactions_total = metrics.create_counter(
-        'telegram_reactions_total',
-        'Суммарное количество реакций',
-        labelnames=['channel']
+        "telegram_reactions_total",
+        "Суммарное количество реакций",
+        labelnames=["channel"],
     )
     replies_total = metrics.create_counter(
-        'telegram_replies_total',
-        'Количество сообщений с reply_to',
-        labelnames=['channel']
+        "telegram_replies_total",
+        "Количество сообщений с reply_to",
+        labelnames=["channel"],
     )
     empty_messages = metrics.create_counter(
-        'telegram_empty_messages_total',
-        'Количество пустых сообщений',
-        labelnames=['channel']
+        "telegram_empty_messages_total",
+        "Количество пустых сообщений",
+        labelnames=["channel"],
     )
     unique_senders = metrics.create_gauge(
-        'telegram_unique_senders_total',
-        'Количество уникальных авторов',
-        labelnames=['channel']
+        "telegram_unique_senders_total",
+        "Количество уникальных авторов",
+        labelnames=["channel"],
     )
     avg_message_length = metrics.create_gauge(
-        'telegram_avg_message_length_bytes',
-        'Средняя длина текста сообщения',
-        labelnames=['channel']
+        "telegram_avg_message_length_bytes",
+        "Средняя длина текста сообщения",
+        labelnames=["channel"],
     )
     logger.debug("init: metrics exporter ready")
 except Exception as e:
     logger.error(f"init: metrics exporter failed: {e}")
+
     class _NoopMetrics:
         def push_metrics(self):
             pass
+
         def record_messages_fetched(self, *a, **k):
             pass
+
         def record_channel_processed(self, *a, **k):
             pass
+
         def record_fetch_error(self, *a, **k):
             pass
+
         def record_fetch_duration(self, *a, **k):
             pass
+
         def update_last_fetch_timestamp(self, *a, **k):
             pass
+
         def update_progress_date(self, *a, **k):
             pass
+
     metrics = _NoopMetrics()
     # Метрики качества данных не доступны в noop режиме
     reactions_total = None
@@ -118,10 +126,10 @@ CHATS = [c.strip() for c in os.getenv("CHATS", "").split(",") if c.strip()]
 logger.debug(
     "init: env loaded",
     extra={
-        'api_id_set': bool(API_ID),
-        'api_hash_set': bool(API_HASH),
-        'chats_count': len(CHATS)
-    }
+        "api_id_set": bool(API_ID),
+        "api_hash_set": bool(API_HASH),
+        "chats_count": len(CHATS),
+    },
 )
 DATA_DIR = Path("/data")  # Изменено для Docker
 DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -132,13 +140,15 @@ rate_limiter = RateLimiter()
 
 
 @retry_on_error
-async def fetch_day(client: TelegramClient, channel_username: str, day_date: date) -> int:
+async def fetch_day(
+    client: TelegramClient, channel_username: str, day_date: date
+) -> int:
     """Fetch messages with retry logic and rate limiting"""
     start_time = time.time()
 
     logger.info(
         f"Fetching {channel_username} for {day_date.isoformat()}",
-        extra={"channel": channel_username, "date": day_date.isoformat()}
+        extra={"channel": channel_username, "date": day_date.isoformat()},
     )
 
     try:
@@ -162,7 +172,7 @@ async def fetch_day(client: TelegramClient, channel_username: str, day_date: dat
         senders = {}
 
         async for msg in client.iter_messages(entity, offset_date=end, reverse=False):
-            if not getattr(msg, 'date', None):
+            if not getattr(msg, "date", None):
                 continue
             msg_date = msg.date
             if msg_date >= end:
@@ -170,13 +180,20 @@ async def fetch_day(client: TelegramClient, channel_username: str, day_date: dat
             if msg_date < start:
                 break
 
-            if getattr(msg, 'sender', None) and getattr(msg.sender, 'id', None):
+            if getattr(msg, "sender", None) and getattr(msg.sender, "id", None):
                 sender_id = msg.sender.id
-                sender_name = getattr(msg.sender, 'first_name', '') or getattr(msg.sender, 'title', '') or 'Unknown User'
-                if sender_name.strip() and not all(ord(c) in [0x2800, 0x3164, 0x2000, 0x200B, 0x200C, 0x200D, 0xFEFF] for c in sender_name):
+                sender_name = (
+                    getattr(msg.sender, "first_name", "")
+                    or getattr(msg.sender, "title", "")
+                    or "Unknown User"
+                )
+                if sender_name.strip() and not all(
+                    ord(c) in [0x2800, 0x3164, 0x2000, 0x200B, 0x200C, 0x200D, 0xFEFF]
+                    for c in sender_name
+                ):
                     senders[sender_id] = sender_name
                 else:
-                    senders[sender_id] = 'Unknown User'
+                    senders[sender_id] = "Unknown User"
 
             messages.append(prepare_message(msg, channel_username))
 
@@ -188,8 +205,8 @@ async def fetch_day(client: TelegramClient, channel_username: str, day_date: dat
         result = {
             "channel_info": {
                 "id": channel_username,
-                "title": getattr(entity, 'title', channel_username),
-                "url": f"https://t.me/{safe_name}"
+                "title": getattr(entity, "title", channel_username),
+                "url": f"https://t.me/{safe_name}",
             },
             "senders": senders,
             "messages": messages,
@@ -347,12 +364,13 @@ if __name__ == "__main__":
         """Force exit after cleanup."""
         import os
         import time
+
         time.sleep(0.1)
         os._exit(0)
 
     def signal_handler(signum, frame):
         """Handle shutdown signals."""
-        print(f'Received signal {signum}, shutting down...', flush=True)
+        print(f"Received signal {signum}, shutting down...", flush=True)
         sys.exit(0)
 
     # Регистрируем обработчики

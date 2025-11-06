@@ -4,20 +4,20 @@
 рекурсии/взаимной блокировки при ошибках отправки (handler -> logger -> handler ...).
 Все внутренние ошибки пишем напрямую в stderr.
 """
+
+import json
 import logging
 import os
-import json
-import time
-from datetime import datetime
-from typing import Dict, Any
-import requests
-from threading import Lock, Thread
 import queue
 import sys
+import time
+from datetime import datetime
+from threading import Lock, Thread
+from typing import Any, Dict
 
+import requests
 
-
-LOKI_URL = os.getenv('LOKI_URL', 'http://loki:3100')
+LOKI_URL = os.getenv("LOKI_URL", "http://loki:3100")
 
 
 class LokiHandler(logging.Handler):
@@ -32,17 +32,17 @@ class LokiHandler(logging.Handler):
             labels: Метки для логов
         """
         super().__init__()
-        self.url = (url or LOKI_URL).rstrip('/') + '/loki/api/v1/push'
+        self.url = (url or LOKI_URL).rstrip("/") + "/loki/api/v1/push"
         self.labels = labels or {}
         self.session = requests.Session()
-        self.session.headers.update({'Content-Type': 'application/json'})
+        self.session.headers.update({"Content-Type": "application/json"})
         self.lock = Lock()
 
         # Базовые метки
-        if 'service' not in self.labels:
-            self.labels['service'] = 'telegram-fetcher'
-        if 'environment' not in self.labels:
-            self.labels['environment'] = os.getenv('ENVIRONMENT', 'development')
+        if "service" not in self.labels:
+            self.labels["service"] = "telegram-fetcher"
+        if "environment" not in self.labels:
+            self.labels["environment"] = os.getenv("ENVIRONMENT", "development")
 
     def emit(self, record: logging.LogRecord):
         """Отправить лог в Loki."""
@@ -64,12 +64,12 @@ class LokiHandler(logging.Handler):
         """Форматировать запись лога для Loki."""
         # Создаем копию меток и добавляем level
         labels = self.labels.copy()
-        labels['level'] = record.levelname.lower()
-        labels['logger'] = record.name
+        labels["level"] = record.levelname.lower()
+        labels["logger"] = record.name
 
         # Если есть extra поля, добавляем их как метки
-        if hasattr(record, 'channel'):
-            labels['channel'] = str(record.channel)
+        if hasattr(record, "channel"):
+            labels["channel"] = str(record.channel)
 
         # Формируем сообщение
         message = self.format(record)
@@ -77,36 +77,26 @@ class LokiHandler(logging.Handler):
         # Timestamp в наносекундах
         timestamp_ns = str(int(record.created * 1e9))
 
-        return {
-            'labels': labels,
-            'timestamp': timestamp_ns,
-            'line': message
-        }
+        return {"labels": labels, "timestamp": timestamp_ns, "line": message}
 
     def send_to_loki(self, log_entry: Dict[str, Any]):
         """Отправить лог в Loki."""
         # Формируем метки в формате {key1="value1",key2="value2"}
-        labels_str = ','.join([f'{k}="{v}"' for k, v in log_entry['labels'].items()])
-        labels_str = '{' + labels_str + '}'
+        labels_str = ",".join([f'{k}="{v}"' for k, v in log_entry["labels"].items()])
+        labels_str = "{" + labels_str + "}"
 
         # Формируем payload для Loki
         payload = {
-            'streams': [
+            "streams": [
                 {
-                    'stream': log_entry['labels'],
-                    'values': [
-                        [log_entry['timestamp'], log_entry['line']]
-                    ]
+                    "stream": log_entry["labels"],
+                    "values": [[log_entry["timestamp"], log_entry["line"]]],
                 }
             ]
         }
 
         try:
-            response = self.session.post(
-                self.url,
-                data=json.dumps(payload),
-                timeout=5
-            )
+            response = self.session.post(self.url, data=json.dumps(payload), timeout=5)
             response.raise_for_status()
         except requests.exceptions.RequestException as e:
             # Логируем ошибку, но не падаем
@@ -116,8 +106,13 @@ class LokiHandler(logging.Handler):
 class BatchLokiHandler(LokiHandler):
     """Handler с батчингом для эффективной отправки логов."""
 
-    def __init__(self, url: str = None, labels: Dict[str, str] = None,
-                 batch_size: int = 10, flush_interval: float = 5.0):
+    def __init__(
+        self,
+        url: str = None,
+        labels: Dict[str, str] = None,
+        batch_size: int = 10,
+        flush_interval: float = 5.0,
+    ):
         """
         Инициализация handler с батчингом.
 
@@ -186,28 +181,18 @@ class BatchLokiHandler(LokiHandler):
             # Группируем логи по меткам
             streams = {}
             for entry in drained:
-                labels_key = json.dumps(entry['labels'], sort_keys=True)
+                labels_key = json.dumps(entry["labels"], sort_keys=True)
                 if labels_key not in streams:
-                    streams[labels_key] = {
-                        'stream': entry['labels'],
-                        'values': []
-                    }
-                streams[labels_key]['values'].append([
-                    entry['timestamp'],
-                    entry['line']
-                ])
+                    streams[labels_key] = {"stream": entry["labels"], "values": []}
+                streams[labels_key]["values"].append(
+                    [entry["timestamp"], entry["line"]]
+                )
 
             # Формируем payload
-            payload = {
-                'streams': list(streams.values())
-            }
+            payload = {"streams": list(streams.values())}
 
             # Отправляем
-            response = self.session.post(
-                self.url,
-                data=json.dumps(payload),
-                timeout=5
-            )
+            response = self.session.post(self.url, data=json.dumps(payload), timeout=5)
             response.raise_for_status()
 
             # Отмечаем время последней успешной отправки
@@ -226,7 +211,7 @@ class BatchLokiHandler(LokiHandler):
         """Закрыть handler и отправить оставшиеся логи."""
         self._stop = True
         try:
-            if hasattr(self, '_flusher') and self._flusher.is_alive():
+            if hasattr(self, "_flusher") and self._flusher.is_alive():
                 self._flusher.join(timeout=self.flush_interval + 0.5)
         except Exception:
             pass

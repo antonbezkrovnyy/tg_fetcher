@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 import json
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
-from datetime import datetime, UTC
 
 HEALTHCHECK_FILE = Path("/tmp/.fetcher_healthy")
+
 
 def main():
     try:
@@ -13,8 +14,8 @@ def main():
             sys.exit(1)
 
         data = json.loads(HEALTHCHECK_FILE.read_text())
-        status = data.get('status', 'unknown')
-        ts = data.get('timestamp')
+        status = data.get("status", "unknown")
+        ts = data.get("timestamp")
         if ts:
             timestamp = datetime.fromisoformat(ts)
             age_seconds = (datetime.now(UTC) - timestamp).total_seconds()
@@ -25,7 +26,7 @@ def main():
             print(f"UNHEALTHY: Healthcheck stale ({age_seconds:.0f}s old)")
             sys.exit(1)
 
-        if status == 'error':
+        if status == "error":
             print(f"UNHEALTHY: {data.get('error', 'Unknown error')}")
             sys.exit(1)
 
@@ -35,6 +36,7 @@ def main():
     except Exception as e:
         print(f"UNHEALTHY: Failed to check health: {e}")
         sys.exit(1)
+
 
 if __name__ == "__main__":
     main()

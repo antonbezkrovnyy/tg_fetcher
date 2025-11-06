@@ -1,11 +1,12 @@
-import pytest
 import asyncio
 import json
-from datetime import datetime, date, UTC, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
-from unittest.mock import Mock, AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
+
+import pytest
 from telethon import TelegramClient
-from telethon.tl.types import Message, User, Channel, Chat
+from telethon.tl.types import Channel, Chat, Message, User
 
 
 @pytest.fixture
@@ -60,10 +61,7 @@ def mock_telegram_entity():
 @pytest.fixture
 def sample_progress_data():
     """Sample progress data for testing."""
-    return {
-        "testchannel": "2025-11-03",
-        "anotherchannel": "2025-11-02"
-    }
+    return {"testchannel": "2025-11-03", "anotherchannel": "2025-11-02"}
 
 
 @pytest.fixture
@@ -76,7 +74,7 @@ def sample_messages_data():
             "text": "First test message",
             "reply_to": None,
             "reactions": 5,
-            "sender_id": 1001
+            "sender_id": 1001,
         },
         {
             "id": 2,
@@ -84,8 +82,8 @@ def sample_messages_data():
             "text": "Second test message",
             "reply_to": 1,
             "reactions": 0,
-            "sender_id": 1002
-        }
+            "sender_id": 1002,
+        },
     ]
 
 
@@ -95,14 +93,14 @@ def mock_env_vars():
     return {
         "API_ID": "12345",
         "API_HASH": "test_hash",
-        "CHATS": "testchannel,anotherchannel"
+        "CHATS": "testchannel,anotherchannel",
     }
 
 
 @pytest.fixture(autouse=True)
 def setup_test_env(mock_env_vars):
     """Setup test environment variables."""
-    with patch.dict('os.environ', mock_env_vars):
+    with patch.dict("os.environ", mock_env_vars):
         yield
 
 
@@ -133,7 +131,7 @@ class MockAsyncIterator:
 @pytest.fixture
 def mock_metrics():
     """Mock metrics exporter."""
-    with patch('fetcher.MetricsExporter') as mock_exporter:
+    with patch("fetcher.MetricsExporter") as mock_exporter:
         mock_instance = Mock()
         mock_instance.record_messages_fetched = Mock()
         mock_instance.record_fetch_duration = Mock()

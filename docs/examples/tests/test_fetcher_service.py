@@ -1,12 +1,14 @@
 """
 Tests for unified FetcherService class.
 """
-import pytest
+
 import asyncio
-from datetime import datetime, date, UTC
-from pathlib import Path
-from unittest.mock import Mock, AsyncMock, patch, MagicMock
 import json
+from datetime import UTC, date, datetime
+from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
+
+import pytest
 
 from config import FetcherConfig, FetchMode
 
@@ -20,12 +22,12 @@ class TestFetcherService:
         """Create a mock configuration."""
         config = Mock(spec=FetcherConfig)
         config.api_id = 12345
-        config.api_hash = 'test_hash'
-        config.session_name = 'test_session'
-        config.session_dir = Path('/tmp/sessions')
-        config.chats = ['test_channel']
-        config.data_dir = Path('/tmp/test_data')
-        config.progress_file = Path('/tmp/test_data/progress.json')
+        config.api_hash = "test_hash"
+        config.session_name = "test_session"
+        config.session_dir = Path("/tmp/sessions")
+        config.chats = ["test_channel"]
+        config.data_dir = Path("/tmp/test_data")
+        config.progress_file = Path("/tmp/test_data/progress.json")
         config.fetch_mode = FetchMode.CONTINUOUS
 
         # Mock rate limit config
@@ -51,7 +53,7 @@ class TestFetcherService:
     @pytest.mark.asyncio
     async def test_fetcher_service_creation(self, mock_config):
         """Test FetcherService can be created with config."""
-        with patch('fetcher_service.TelegramClient') as mock_client_class:
+        with patch("fetcher_service.TelegramClient") as mock_client_class:
             from fetcher_service import FetcherService
 
             service = FetcherService(mock_config)
@@ -62,9 +64,11 @@ class TestFetcherService:
     @pytest.mark.asyncio
     async def test_fetch_single_day(self, mock_config, mock_client):
         """Test fetching messages for a single day."""
-        with patch('fetcher_service.TelegramClient', return_value=mock_client), \
-             patch('fetcher_service.prepare_message') as mock_prepare_message, \
-             patch('fetcher_service.save_json') as mock_save_json:
+        with (
+            patch("fetcher_service.TelegramClient", return_value=mock_client),
+            patch("fetcher_service.prepare_message") as mock_prepare_message,
+            patch("fetcher_service.save_json") as mock_save_json,
+        ):
 
             from fetcher_service import FetcherService
 
@@ -80,9 +84,9 @@ class TestFetcherService:
 
             # Mock prepare_message to return a serializable dict
             mock_prepare_message.return_value = {
-                'id': 1,
-                'date': '2024-01-01T12:00:00+00:00',
-                'text': 'Test message'
+                "id": 1,
+                "date": "2024-01-01T12:00:00+00:00",
+                "text": "Test message",
             }
 
             async def mock_iter_messages(*args, **kwargs):
@@ -91,7 +95,9 @@ class TestFetcherService:
             mock_client.iter_messages = mock_iter_messages
 
             # Test fetch - need to pass client as first argument
-            result = await service.fetch_day(mock_client, "test_channel", date(2024, 1, 1))
+            result = await service.fetch_day(
+                mock_client, "test_channel", date(2024, 1, 1)
+            )
 
             assert isinstance(result, int)
             assert result == 1  # Should have processed 1 message
@@ -104,34 +110,36 @@ class TestFetcherService:
         """Test continuous fetching mode strategy."""
         mock_config.fetch_mode = FetchMode.CONTINUOUS
 
-        with patch('fetcher_service.TelegramClient') as mock_client_class:
+        with patch("fetcher_service.TelegramClient") as mock_client_class:
             from fetcher_service import FetcherService
 
             service = FetcherService(mock_config)
             strategy = service._get_fetch_strategy()
 
             # Should return ContinuousFetchStrategy
-            assert strategy.__class__.__name__ == 'ContinuousFetchStrategy'
+            assert strategy.__class__.__name__ == "ContinuousFetchStrategy"
 
     @pytest.mark.asyncio
     async def test_yesterday_mode_strategy(self, mock_config):
         """Test yesterday fetching mode strategy."""
         mock_config.fetch_mode = FetchMode.YESTERDAY_ONLY
 
-        with patch('fetcher_service.TelegramClient') as mock_client_class:
+        with patch("fetcher_service.TelegramClient") as mock_client_class:
             from fetcher_service import FetcherService
 
             service = FetcherService(mock_config)
             strategy = service._get_fetch_strategy()
 
             # Should return YesterdayFetchStrategy
-            assert strategy.__class__.__name__ == 'YesterdayFetchStrategy'
+            assert strategy.__class__.__name__ == "YesterdayFetchStrategy"
 
     @pytest.mark.asyncio
     async def test_service_with_metrics(self, mock_config, mock_client):
         """Test FetcherService integrates with metrics."""
-        with patch('fetcher_service.TelegramClient', return_value=mock_client), \
-             patch('fetcher_service.MetricsExporter') as mock_metrics_class:
+        with (
+            patch("fetcher_service.TelegramClient", return_value=mock_client),
+            patch("fetcher_service.MetricsExporter") as mock_metrics_class,
+        ):
 
             from fetcher_service import FetcherService
 
@@ -146,8 +154,10 @@ class TestFetcherService:
     @pytest.mark.asyncio
     async def test_service_handles_no_observability(self, mock_config, mock_client):
         """Test FetcherService handles missing observability module gracefully."""
-        with patch('fetcher_service.TelegramClient', return_value=mock_client), \
-             patch.dict('sys.modules', {'observability.metrics': None}):
+        with (
+            patch("fetcher_service.TelegramClient", return_value=mock_client),
+            patch.dict("sys.modules", {"observability.metrics": None}),
+        ):
 
             from fetcher_service import FetcherService
 
@@ -165,7 +175,7 @@ class TestFetchStrategies:
         """Create mock fetcher service."""
         service = Mock()
         service.config = Mock()
-        service.config.chats = ['test_channel']
+        service.config.chats = ["test_channel"]
         return service
 
     @pytest.mark.asyncio
@@ -176,12 +186,10 @@ class TestFetchStrategies:
         strategy = ContinuousFetchStrategy(mock_service)
 
         # Mock progress data
-        with patch('fetcher_service.load_progress') as mock_load_progress:
-            mock_load_progress.return_value = {
-                'test_channel': '2024-01-01'
-            }
+        with patch("fetcher_service.load_progress") as mock_load_progress:
+            mock_load_progress.return_value = {"test_channel": "2024-01-01"}
 
-            dates = await strategy.get_dates_to_fetch('test_channel')
+            dates = await strategy.get_dates_to_fetch("test_channel")
 
             # Should return dates from last processed to today
             assert len(dates) > 0
@@ -194,11 +202,12 @@ class TestFetchStrategies:
 
         strategy = YesterdayFetchStrategy(mock_service)
 
-        dates = await strategy.get_dates_to_fetch('test_channel')
+        dates = await strategy.get_dates_to_fetch("test_channel")
 
         # Should return only yesterday
         assert len(dates) == 1
         from datetime import timedelta
+
         yesterday = datetime.now(UTC).date() - timedelta(days=1)
         assert dates[0] == yesterday
 
@@ -215,15 +224,17 @@ class TestFetcherServiceIntegration:
         # Create test config
         config = FetcherConfig(
             api_id=12345,
-            api_hash='test_hash',
-            session_dir=temp_data_dir / 'sessions',
-            chats=['test_channel'],
+            api_hash="test_hash",
+            session_dir=temp_data_dir / "sessions",
+            chats=["test_channel"],
             data_dir=temp_data_dir,
-            fetch_mode=FetchMode.YESTERDAY_ONLY.value
+            fetch_mode=FetchMode.YESTERDAY_ONLY.value,
         )
 
-        with patch('fetcher_service.TelegramClient') as mock_client_class, \
-             patch('fetcher_service.save_json') as mock_save_json:
+        with (
+            patch("fetcher_service.TelegramClient") as mock_client_class,
+            patch("fetcher_service.save_json") as mock_save_json,
+        ):
 
             from fetcher_service import FetcherService
 

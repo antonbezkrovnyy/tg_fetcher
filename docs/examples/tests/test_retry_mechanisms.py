@@ -1,9 +1,10 @@
-import pytest
 import asyncio
-from unittest.mock import Mock, AsyncMock, patch
-from datetime import datetime, UTC
-import sys
 import os
+import sys
+from datetime import UTC, datetime
+from unittest.mock import AsyncMock, Mock, patch
+
+import pytest
 
 # Add parent directory to path for importing modules
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -98,7 +99,7 @@ class TestRetryMechanisms:
             max_delay=60.0,
             backoff_multiplier=2.0,
             jitter=True,
-            retry_on_exceptions=[ConnectionError, TimeoutError]
+            retry_on_exceptions=[ConnectionError, TimeoutError],
         )
 
         assert config.max_retries == 3
@@ -125,10 +126,12 @@ class TestErrorHandlingIntegration:
                 raise ConnectionError("Channel unavailable")
             return 5  # Success for other channels
 
-        with patch('fetcher.fetch_day', side_effect=mock_fetch_day), \
-             patch('fetcher.CHATS', ["channel1", "failing_channel", "channel2"]), \
-             patch('fetcher.TelegramClient') as mock_client_class, \
-             patch('fetcher.DATA_DIR', temp_data_dir):
+        with (
+            patch("fetcher.fetch_day", side_effect=mock_fetch_day),
+            patch("fetcher.CHATS", ["channel1", "failing_channel", "channel2"]),
+            patch("fetcher.TelegramClient") as mock_client_class,
+            patch("fetcher.DATA_DIR", temp_data_dir),
+        ):
 
             mock_client = AsyncMock()
             mock_client_class.return_value = mock_client
@@ -163,17 +166,19 @@ class TestRetryUtilsToImplement:
 
         # With jitter, delays can be ±25% of the expected value
         assert 0.75 <= delay1 <= 2.0  # Base 1.0 with jitter
-        assert 1.5 <= delay2 <= 4.0   # Base 2.0 with jitter
-        assert 3.0 <= delay3 <= 8.0   # Base 4.0 with jitter
+        assert 1.5 <= delay2 <= 4.0  # Base 2.0 with jitter
+        assert 3.0 <= delay3 <= 8.0  # Base 4.0 with jitter
 
         # Test max delay cap
-        delay_high = calculate_backoff(attempt=10, base=1.0, multiplier=2.0, max_delay=60.0)
+        delay_high = calculate_backoff(
+            attempt=10, base=1.0, multiplier=2.0, max_delay=60.0
+        )
         assert delay_high <= 80.0  # Allow jitter variation in exponential backoff
 
     def test_should_retry_logic(self):
         """Test retry decision logic."""
         from retry_utils import should_retry_exception
-        from telethon.errors import FloodWaitError, AuthKeyError
+        from telethon.errors import AuthKeyError, FloodWaitError
 
         # Should retry on network/temporary errors
         assert should_retry_exception(ConnectionError("timeout")) is True

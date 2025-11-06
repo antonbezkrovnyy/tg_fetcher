@@ -1,26 +1,28 @@
 """
 Retry logic and error handling utilities
 """
-import logging
+
 import asyncio
+import logging
+import os
 from functools import wraps
+
+from telethon.errors import FloodWaitError, RPCError
 from tenacity import (
+    after_log,
+    before_sleep_log,
     retry,
+    retry_if_exception_type,
     stop_after_attempt,
     wait_exponential,
-    retry_if_exception_type,
-    before_sleep_log,
-    after_log
 )
-from telethon.errors import FloodWaitError, RPCError
-import os
 
 logger = logging.getLogger(__name__)
 
 # Configuration from environment
-MAX_RETRIES = int(os.getenv('MAX_RETRIES', '3'))
-MIN_RETRY_WAIT = int(os.getenv('MIN_RETRY_WAIT', '1'))
-MAX_RETRY_WAIT = int(os.getenv('MAX_RETRY_WAIT', '60'))
+MAX_RETRIES = int(os.getenv("MAX_RETRIES", "3"))
+MIN_RETRY_WAIT = int(os.getenv("MIN_RETRY_WAIT", "1"))
+MAX_RETRY_WAIT = int(os.getenv("MAX_RETRY_WAIT", "60"))
 
 
 def is_retryable_error(exception):
@@ -55,13 +57,9 @@ def retry_on_error(func):
     @retry(
         retry=retry_if_exception_type(lambda e: is_retryable_error(e)),
         stop=stop_after_attempt(MAX_RETRIES),
-        wait=wait_exponential(
-            multiplier=1,
-            min=MIN_RETRY_WAIT,
-            max=MAX_RETRY_WAIT
-        ),
+        wait=wait_exponential(multiplier=1, min=MIN_RETRY_WAIT, max=MAX_RETRY_WAIT),
         before_sleep=before_sleep_log(logger, logging.WARNING),
-        after=after_log(logger, logging.INFO)
+        after=after_log(logger, logging.INFO),
     )
     @wraps(func)
     async def async_wrapper(*args, **kwargs):
@@ -71,34 +69,27 @@ def retry_on_error(func):
             # FloodWait needs special handling - log and re-raise
             logger.warning(
                 f"FloodWait error: must wait {e.seconds} seconds",
-                extra={
-                    'error_type': 'FloodWaitError',
-                    'wait_seconds': e.seconds
-                }
+                extra={"error_type": "FloodWaitError", "wait_seconds": e.seconds},
             )
             raise
         except Exception as e:
             logger.error(
                 f"Error in {func.__name__}: {e}",
                 extra={
-                    'function': func.__name__,
-                    'error_type': type(e).__name__,
-                    'error_message': str(e)
+                    "function": func.__name__,
+                    "error_type": type(e).__name__,
+                    "error_message": str(e),
                 },
-                exc_info=True
+                exc_info=True,
             )
             raise
 
     @retry(
         retry=retry_if_exception_type(lambda e: is_retryable_error(e)),
         stop=stop_after_attempt(MAX_RETRIES),
-        wait=wait_exponential(
-            multiplier=1,
-            min=MIN_RETRY_WAIT,
-            max=MAX_RETRY_WAIT
-        ),
+        wait=wait_exponential(multiplier=1, min=MIN_RETRY_WAIT, max=MAX_RETRY_WAIT),
         before_sleep=before_sleep_log(logger, logging.WARNING),
-        after=after_log(logger, logging.INFO)
+        after=after_log(logger, logging.INFO),
     )
     @wraps(func)
     def sync_wrapper(*args, **kwargs):
@@ -108,11 +99,11 @@ def retry_on_error(func):
             logger.error(
                 f"Error in {func.__name__}: {e}",
                 extra={
-                    'function': func.__name__,
-                    'error_type': type(e).__name__,
-                    'error_message': str(e)
+                    "function": func.__name__,
+                    "error_type": type(e).__name__,
+                    "error_message": str(e),
                 },
-                exc_info=True
+                exc_info=True,
             )
             raise
 
@@ -127,6 +118,7 @@ def handle_flood_wait(max_wait: int = 300):
     """
     Decorator for handling Telegram FloodWaitError specifically.
     """
+
     def decorator(func):
         @wraps(func)
         async def wrapper(*args, **kwargs):
@@ -136,16 +128,21 @@ def handle_flood_wait(max_wait: int = 300):
                 wait_time = e.seconds
 
                 if wait_time > max_wait:
-                    logger.error(f"Flood wait time {wait_time}s exceeds max_wait {max_wait}s. Giving up.")
+                    logger.error(
+                        f"Flood wait time {wait_time}s exceeds max_wait {max_wait}s. Giving up."
+                    )
                     raise
 
-                logger.warning(f"Flood wait triggered. Waiting {wait_time}s before retry.")
+                logger.warning(
+                    f"Flood wait triggered. Waiting {wait_time}s before retry."
+                )
                 await asyncio.sleep(wait_time)
 
                 # Retry once after flood wait
                 return await func(*args, **kwargs)
 
         return wrapper
+
     return decorator
 
 
@@ -162,9 +159,11 @@ async def handle_flood_wait_direct(func, *args, **kwargs):
             logger.warning(
                 f"FloodWait encountered. Waiting {wait_time} seconds...",
                 extra={
-                    'wait_seconds': wait_time,
-                    'function': func.__name__ if hasattr(func, '__name__') else str(func)
-                }
+                    "wait_seconds": wait_time,
+                    "function": (
+                        func.__name__ if hasattr(func, "__name__") else str(func)
+                    ),
+                },
             )
             await asyncio.sleep(wait_time)
             logger.info("Resuming after FloodWait")
@@ -173,7 +172,10 @@ async def handle_flood_wait_direct(func, *args, **kwargs):
 
 # Additional utility functions for testing compatibility
 
-def calculate_backoff(attempt: int, base: float, multiplier: float, max_delay: float, jitter: bool = True) -> float:
+
+def calculate_backoff(
+    attempt: int, base: float, multiplier: float, max_delay: float, jitter: bool = True
+) -> float:
     """Calculate delay for exponential backoff with optional jitter."""
     import random
 
@@ -202,6 +204,7 @@ def should_retry_exception(exception: Exception) -> bool:
     # Authentication errors - should not retry
     try:
         from telethon.errors import AuthKeyError
+
         if isinstance(exception, AuthKeyError):
             return False
     except ImportError:
@@ -226,7 +229,7 @@ class RetryConfig:
         max_delay: float = 60.0,
         backoff_multiplier: float = 2.0,
         jitter: bool = True,
-        retry_on_exceptions = None
+        retry_on_exceptions=None,
     ):
         self.max_retries = max_retries
         self.base_delay = base_delay
@@ -249,6 +252,7 @@ class RetryConfig:
         # Never retry authentication errors
         try:
             from telethon.errors import AuthKeyError
+
             if isinstance(exception, AuthKeyError):
                 return False
         except ImportError:
@@ -265,9 +269,18 @@ class RetryConfig:
 class RateLimiter:
     """Enhanced rate limiter for API requests"""
 
-    def __init__(self, requests_per_second: float = None, calls_per_second: float = None, burst_size: int = 5):
+    def __init__(
+        self,
+        requests_per_second: float = None,
+        calls_per_second: float = None,
+        burst_size: int = 5,
+    ):
         # Support both parameter names for backward compatibility
-        rate = calls_per_second or requests_per_second or float(os.getenv('REQUESTS_PER_SECOND', '1.0'))
+        rate = (
+            calls_per_second
+            or requests_per_second
+            or float(os.getenv("REQUESTS_PER_SECOND", "1.0"))
+        )
 
         self.calls_per_second = rate
         self.burst_size = burst_size
@@ -283,11 +296,14 @@ class RateLimiter:
             return
 
         import time
+
         now = time.time()
 
         # Token bucket algorithm for burst handling
         time_passed = now - self.last_request_time
-        self.tokens = min(self.burst_size, self.tokens + time_passed * self.calls_per_second)
+        self.tokens = min(
+            self.burst_size, self.tokens + time_passed * self.calls_per_second
+        )
 
         if self.tokens >= 1.0:
             self.tokens -= 1.0
@@ -308,7 +324,7 @@ def retry_on_error_enhanced(
     max_attempts: int = 3,
     backoff_factor: float = 1.0,
     max_delay: float = 60.0,
-    exceptions: tuple = None
+    exceptions: tuple = None,
 ):
     """Enhanced decorator for adding retry logic to async functions."""
 
@@ -331,7 +347,9 @@ def retry_on_error_enhanced(
                         raise
 
                     if attempt >= max_attempts:
-                        logger.error(f"Max retry attempts ({max_attempts}) reached for {func.__name__}")
+                        logger.error(
+                            f"Max retry attempts ({max_attempts}) reached for {func.__name__}"
+                        )
                         raise
 
                     delay = calculate_backoff(
@@ -339,7 +357,7 @@ def retry_on_error_enhanced(
                         backoff_factor,
                         2.0,  # multiplier
                         max_delay,
-                        jitter=True
+                        jitter=True,
                     )
 
                     logger.warning(
@@ -354,4 +372,5 @@ def retry_on_error_enhanced(
                 raise last_exception
 
         return wrapper
+
     return decorator

@@ -250,4 +250,3 @@ async for start_date, end_date in self.strategy.get_date_ranges(client, entity):
 - [ ] Вернуть стратегию на `yesterday` (сейчас временно `today` для отладки)
 - [ ] Написать unit тесты для date range logic
 - [ ] Документировать все найденные проблемы в README
-

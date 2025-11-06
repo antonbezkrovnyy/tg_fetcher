@@ -1,9 +1,10 @@
-import pytest
 import asyncio
 import json
-from unittest.mock import AsyncMock, patch, Mock
-from datetime import datetime, date, UTC
+from datetime import UTC, date, datetime
 from pathlib import Path
+from unittest.mock import AsyncMock, Mock, patch
+
+import pytest
 
 # Test the fetcher with configuration
 
@@ -18,20 +19,20 @@ class TestFetcherWithConfig:
 
         # Mock environment variables for config
         env_vars = {
-            'API_ID': '12345',
-            'API_HASH': 'test_hash',
-            'CHATS': 'channel1,channel2',
-            'DATA_DIR': '/test/data',
-            'MAX_RETRIES': '5'
+            "API_ID": "12345",
+            "API_HASH": "test_hash",
+            "CHATS": "channel1,channel2",
+            "DATA_DIR": "/test/data",
+            "MAX_RETRIES": "5",
         }
 
-        with patch.dict('os.environ', env_vars):
+        with patch.dict("os.environ", env_vars):
             config = load_config()
 
             assert config.api_id == 12345
-            assert config.api_hash == 'test_hash'
-            assert config.chats == ['channel1', 'channel2']
-            assert config.data_dir == Path('/test/data')
+            assert config.api_hash == "test_hash"
+            assert config.chats == ["channel1", "channel2"]
+            assert config.data_dir == Path("/test/data")
             assert config.max_retries == 5
 
     @pytest.mark.asyncio
@@ -47,14 +48,16 @@ class TestFetcherWithConfig:
             data_dir=temp_data_dir,
             session_dir=temp_data_dir / "sessions",
             max_retries=2,
-            concurrent_channels=1
+            concurrent_channels=1,
         )
 
         # Mock the config loading and global config variable
-        with patch('fetcher.load_config', return_value=test_config), \
-             patch('fetcher.config', test_config), \
-             patch('fetcher.TelegramClient') as mock_client_class, \
-             patch('fetcher.MetricsExporter'):
+        with (
+            patch("fetcher.load_config", return_value=test_config),
+            patch("fetcher.config", test_config),
+            patch("fetcher.TelegramClient") as mock_client_class,
+            patch("fetcher.MetricsExporter"),
+        ):
 
             mock_client = AsyncMock()
             mock_client_class.return_value = mock_client
@@ -74,6 +77,7 @@ class TestFetcherWithConfig:
             async def empty_messages(*args, **kwargs):
                 if False:
                     yield None
+
             mock_client.iter_messages = empty_messages
 
             # Import and run fetcher after mocking
@@ -93,15 +97,11 @@ class TestFetcherWithConfig:
 
     def test_config_validation_in_fetcher(self):
         """Test that fetcher fails with invalid configuration."""
-        from config import FetcherConfig, ConfigValidationError
+        from config import ConfigValidationError, FetcherConfig
 
         # Test missing required fields
         with pytest.raises(ConfigValidationError, match="api_id is required"):
-            FetcherConfig(
-                api_id=None,
-                api_hash="test",
-                chats=["channel1"]
-            )
+            FetcherConfig(api_id=None, api_hash="test", chats=["channel1"])
 
     def test_example_config_creation(self, temp_data_dir):
         """Test creating example configuration file."""

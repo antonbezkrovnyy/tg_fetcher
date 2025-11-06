@@ -1,9 +1,10 @@
-import pytest
 import asyncio
 import json
-from unittest.mock import AsyncMock, patch, Mock
-from datetime import datetime, date, UTC
+from datetime import UTC, date, datetime
 from pathlib import Path
+from unittest.mock import AsyncMock, Mock, patch
+
+import pytest
 
 # Test the improved fetcher with error handling
 
@@ -16,17 +17,19 @@ class TestImprovedFetcher:
     async def test_fetcher_with_retry_mechanisms(self, temp_data_dir):
         """Test that the improved fetcher uses retry mechanisms."""
         # Mock all necessary imports and dependencies
-        with patch('fetcher.TelegramClient') as mock_client_class, \
-             patch('fetcher.config') as mock_config, \
-             patch('fetcher.MetricsExporter') as mock_metrics:
+        with (
+            patch("fetcher.TelegramClient") as mock_client_class,
+            patch("fetcher.config") as mock_config,
+            patch("fetcher.MetricsExporter") as mock_metrics,
+        ):
 
             # Configure config mock
             mock_config.data_dir = temp_data_dir
-            mock_config.progress_file = temp_data_dir / 'progress.json'
-            mock_config.chats = ['test_channel']
+            mock_config.progress_file = temp_data_dir / "progress.json"
+            mock_config.chats = ["test_channel"]
             mock_config.api_id = 12345
-            mock_config.api_hash = 'test_hash'
-            mock_config.session_name = 'test_session'
+            mock_config.api_hash = "test_hash"
+            mock_config.session_name = "test_session"
 
             # Mock rate limit config
             mock_rate_limit = Mock()
@@ -96,7 +99,7 @@ class TestImprovedFetcher:
 
         mock_client.iter_messages = mock_iter_messages
 
-        with patch('fetcher.DATA_DIR', temp_data_dir):
+        with patch("fetcher.DATA_DIR", temp_data_dir):
             # Should succeed after retry
             result = await fetch_day(mock_client, "test_channel", date(2025, 11, 4))
 

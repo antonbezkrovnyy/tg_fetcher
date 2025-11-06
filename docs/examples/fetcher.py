@@ -1,27 +1,40 @@
 # Lightweight orchestrator: fetch messages and save per-channel files.
-import os
-import json
 import asyncio
+import json
+import os
 import time
-from datetime import datetime, timedelta, UTC, date
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
+
+from fetcher_utils import build_output_path, prepare_message, save_json
+from retry_utils import RateLimiter, handle_flood_wait_direct, retry_on_error_enhanced
 from telethon import TelegramClient
 
-from fetcher_utils import prepare_message, build_output_path, save_json
-from retry_utils import retry_on_error_enhanced, handle_flood_wait_direct, RateLimiter
-from config import load_config, FetcherConfig
+from config import FetcherConfig, load_config
 
 try:
     from observability.metrics import MetricsExporter
 except ImportError:
     # Fallback for when observability module is not available
     class MetricsExporter:
-        def record_messages_fetched(self, *args, **kwargs): pass
-        def record_fetch_duration(self, *args, **kwargs): pass
-        def update_last_fetch_timestamp(self, *args, **kwargs): pass
-        def update_progress_date(self, *args, **kwargs): pass
-        def record_fetch_error(self, *args, **kwargs): pass
-        def record_channel_processed(self, *args, **kwargs): pass
+        def record_messages_fetched(self, *args, **kwargs):
+            pass
+
+        def record_fetch_duration(self, *args, **kwargs):
+            pass
+
+        def update_last_fetch_timestamp(self, *args, **kwargs):
+            pass
+
+        def update_progress_date(self, *args, **kwargs):
+            pass
+
+        def record_fetch_error(self, *args, **kwargs):
+            pass
+
+        def record_channel_processed(self, *args, **kwargs):
+            pass
+
 
 # Load configuration
 config = load_config()
@@ -35,7 +48,9 @@ metrics = MetricsExporter()
 
 
 @retry_on_error_enhanced(max_attempts=3, backoff_factor=2.0)
-async def fetch_day(client: TelegramClient, channel_username: str, day_date: date) -> int:
+async def fetch_day(
+    client: TelegramClient, channel_username: str, day_date: date
+) -> int:
     """Fetch messages from a single day for a channel/chat and save them into a JSON file.
 
     - day_date: a date object (UTC day) for which messages should be collected.
@@ -55,7 +70,7 @@ async def fetch_day(client: TelegramClient, channel_username: str, day_date: dat
 
         # iterate forward from start-of-day to end-of-day: use offset_date=end and stop when msg.date < start
         async for msg in client.iter_messages(entity, offset_date=end, reverse=False):
-            if not getattr(msg, 'date', None):
+            if not getattr(msg, "date", None):
                 continue
             msg_date = msg.date
             if msg_date >= end:
@@ -65,14 +80,21 @@ async def fetch_day(client: TelegramClient, channel_username: str, day_date: dat
                 break
 
             # collect sender display name (if available)
-            if getattr(msg, 'sender', None) and getattr(msg.sender, 'id', None):
+            if getattr(msg, "sender", None) and getattr(msg.sender, "id", None):
                 sender_id = msg.sender.id
-                sender_name = getattr(msg.sender, 'first_name', '') or getattr(msg.sender, 'title', '') or 'Unknown User'
+                sender_name = (
+                    getattr(msg.sender, "first_name", "")
+                    or getattr(msg.sender, "title", "")
+                    or "Unknown User"
+                )
                 # Skip empty/invisible names
-                if sender_name.strip() and not all(ord(c) in [0x2800, 0x3164, 0x2000, 0x200B, 0x200C, 0x200D, 0xFEFF] for c in sender_name):
+                if sender_name.strip() and not all(
+                    ord(c) in [0x2800, 0x3164, 0x2000, 0x200B, 0x200C, 0x200D, 0xFEFF]
+                    for c in sender_name
+                ):
                     senders[sender_id] = sender_name
                 else:
-                    senders[sender_id] = 'Unknown User'
+                    senders[sender_id] = "Unknown User"
 
             messages.append(prepare_message(msg, channel_username))
 
@@ -84,8 +106,8 @@ async def fetch_day(client: TelegramClient, channel_username: str, day_date: dat
         result = {
             "channel_info": {
                 "id": channel_username,
-                "title": getattr(entity, 'title', channel_username),
-                "url": f"https://t.me/{safe_name}"
+                "title": getattr(entity, "title", channel_username),
+                "url": f"https://t.me/{safe_name}",
             },
             "senders": senders,
             "messages": messages,
@@ -122,7 +144,7 @@ async def main():
     # load progress
     if PROGRESS_FILE.exists():
         try:
-            with PROGRESS_FILE.open('r', encoding='utf-8') as pf:
+            with PROGRESS_FILE.open("r", encoding="utf-8") as pf:
                 progress = json.load(pf)
         except Exception:
             progress = {}
@@ -154,7 +176,7 @@ async def main():
             try:
                 entity = await client.get_entity(ch)
                 msgs = await client.get_messages(entity, limit=1, reverse=True)
-                if msgs and getattr(msgs[0], 'date', None):
+                if msgs and getattr(msgs[0], "date", None):
                     start_date = msgs[0].date.date()
                 else:
                     # fallback start date (configurable if needed)
@@ -180,7 +202,7 @@ async def main():
 
                 # persist progress (mark this date as last parsed)
                 progress[ch] = cursor.isoformat()
-                with PROGRESS_FILE.open('w', encoding='utf-8') as pf:
+                with PROGRESS_FILE.open("w", encoding="utf-8") as pf:
                     json.dump(progress, pf, ensure_ascii=False, indent=2)
 
                 # Записываем успешную обработку канала
@@ -191,16 +213,22 @@ async def main():
 
             except Exception as e:
                 consecutive_failures += 1
-                print(f"Error fetching {ch} for {cursor.isoformat()} (attempt {consecutive_failures}): {e}")
+                print(
+                    f"Error fetching {ch} for {cursor.isoformat()} (attempt {consecutive_failures}): {e}"
+                )
 
                 # If too many consecutive failures, skip this channel
                 if consecutive_failures >= max_consecutive_failures:
-                    print(f"Too many consecutive failures for {ch}, skipping remaining dates")
+                    print(
+                        f"Too many consecutive failures for {ch}, skipping remaining dates"
+                    )
                     break
 
                 # For non-consecutive failures, just skip this date and continue
                 if consecutive_failures == 1:
-                    print(f"Skipping date {cursor.isoformat()} for {ch}, continuing with next date")
+                    print(
+                        f"Skipping date {cursor.isoformat()} for {ch}, continuing with next date"
+                    )
 
             cursor = cursor + timedelta(days=1)
 
