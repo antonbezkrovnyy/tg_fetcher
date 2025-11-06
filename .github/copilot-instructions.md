@@ -11,6 +11,12 @@ This is a Python project. Follow these guidelines when working in this codebase.
 - **Documentation**: Follow user's language preference - ask if unclear
 - **Commit Messages**: Use English with conventional commits format
 
+### Command Logging
+- **All Terminal Commands**: Every command executed via `run_in_terminal` tool MUST be logged to `docs/console.log`
+- **Format**: Timestamp, command, and brief description
+- **Purpose**: Maintain history of all executed commands for project documentation and debugging
+- **Update**: Append to the file, never overwrite (keep full history)
+
 ### Token Efficiency
 - **Read selectively**: Don't read entire large files - ask user for specific line ranges or sections
 - **Avoid redundant reads**: If file content is already in context, don't re-read it
