@@ -22,12 +22,12 @@ from telethon import TelegramClient
 from telethon.errors import SessionPasswordNeededError
 
 from src.core.config import FetcherConfig
-from src.observability.logging_config import setup_logging, get_logger
+from src.observability.logging_config import get_logger, setup_logging
 
 
 async def authorize_session():
     """Interactively authorize Telegram session."""
-    
+
     # Load configuration
     try:
         config = FetcherConfig()
@@ -39,37 +39,35 @@ async def authorize_session():
         print("  - TELEGRAM_API_HASH")
         print("  - TELEGRAM_PHONE")
         return 1
-    
+
     # Setup logging
     setup_logging(
         level="INFO",
         log_format="text",
         service_name="authorize-session",
-        loki_url=None  # No Loki for interactive script
+        loki_url=None,  # No Loki for interactive script
     )
     logger = get_logger(__name__)
-    
+
     # Create session file path
     session_file = config.get_session_file(config.telegram_phone)
     session_file.parent.mkdir(parents=True, exist_ok=True)
-    
+
     print("=" * 60)
     print("🔐 Telegram Session Authorization")
     print("=" * 60)
     print(f"\nPhone: {config.telegram_phone}")
     print(f"Session file: {session_file}")
     print()
-    
+
     # Create Telegram client
     client = TelegramClient(
-        str(session_file),
-        config.telegram_api_id,
-        config.telegram_api_hash
+        str(session_file), config.telegram_api_id, config.telegram_api_hash
     )
-    
+
     try:
         await client.connect()
-        
+
         if await client.is_user_authorized():
             print("✅ Session already authorized!")
             me = await client.get_me()
@@ -77,20 +75,20 @@ async def authorize_session():
             print(f"Username: @{me.username or 'N/A'}")
             print(f"Phone: {me.phone}")
             return 0
-        
+
         print("📱 Sending verification code to your Telegram...")
         await client.send_code_request(config.telegram_phone)
-        
+
         print("\n⏳ Check your Telegram app for the verification code")
         code = input("Enter the code: ").strip()
-        
+
         try:
             await client.sign_in(config.telegram_phone, code)
         except SessionPasswordNeededError:
             print("\n🔒 Two-factor authentication enabled")
             password = input("Enter your 2FA password: ").strip()
             await client.sign_in(password=password)
-        
+
         # Verify authorization
         if await client.is_user_authorized():
             me = await client.get_me()
@@ -105,14 +103,14 @@ async def authorize_session():
                 extra={
                     "phone": config.telegram_phone,
                     "user_id": me.id,
-                    "username": me.username
-                }
+                    "username": me.username,
+                },
             )
             return 0
         else:
             print("\n❌ Authorization failed. Please try again.")
             return 1
-            
+
     except KeyboardInterrupt:
         print("\n\n⚠️  Authorization cancelled by user")
         return 1

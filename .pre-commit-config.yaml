@@ -1,0 +1,62 @@
+# Pre-commit hooks configuration
+# See https://pre-commit.com for more information
+# Run manually: pre-commit run --all-files
+# Install: pre-commit install
+
+repos:
+  # General file checks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: ^(migrations/|tests/)
+      - id: end-of-file-fixer
+        exclude: ^(migrations/|tests/)
+      - id: check-yaml
+      - id: check-added-large-files
+        args: ['--maxkb=1000']
+      - id: check-merge-conflict
+      - id: check-toml
+      - id: check-json
+        exclude: ^\.vscode/
+      - id: mixed-line-ending
+        args: ['--fix=lf']
+
+  # Black - code formatter
+  - repo: https://github.com/psf/black
+    rev: 24.2.0
+    hooks:
+      - id: black
+        language_version: python3.11
+        exclude: ^(migrations/|tests/|\.venv/)
+
+  # isort - import sorting
+  - repo: https://github.com/pycqa/isort
+    rev: 5.13.2
+    hooks:
+      - id: isort
+        name: isort
+        exclude: ^(migrations/|tests/|\.venv/)
+
+  # flake8 - linting
+  - repo: https://github.com/pycqa/flake8
+    rev: 7.0.0
+    hooks:
+      - id: flake8
+        exclude: ^(migrations/|tests/|\.venv/)
+        additional_dependencies:
+          - flake8-docstrings
+          - flake8-bugbear
+          - flake8-comprehensions
+          - flake8-simplify
+
+  # mypy - static type checking
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.8.0
+    hooks:
+      - id: mypy
+        exclude: ^(migrations/|tests/|\.venv/)
+        additional_dependencies:
+          - types-requests
+          - pydantic
+        args: [--config-file=pyproject.toml]

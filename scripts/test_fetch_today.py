@@ -1,4 +1,5 @@
 """Test script to debug message fetching locally (without Docker)."""
+
 import asyncio
 import sys
 from pathlib import Path
@@ -22,27 +23,27 @@ logger = get_logger(__name__)
 
 async def test_fetch_service():
     """Test the fetcher service with detailed logging."""
-    logger.info("="*60)
+    logger.info("=" * 60)
     logger.info("Starting Fetcher Service Test (Today's messages)")
-    logger.info("="*60)
-    
+    logger.info("=" * 60)
+
     config = FetcherConfig()
-    
+
     logger.info(f"Config loaded:")
     logger.info(f"  - Chats: {config.telegram_chats}")
     logger.info(f"  - Session dir: {config.session_dir}")
     logger.info(f"  - Data dir: {config.data_dir}")
-    
+
     # Create service - it creates strategy and repository internally
     service = FetcherService(config=config)
-    
+
     logger.info("\nStarting fetch operation...")
-    
+
     try:
         await service.run()
-        logger.info("\n" + "="*60)
+        logger.info("\n" + "=" * 60)
         logger.info("✅ Fetch completed successfully!")
-        logger.info("="*60)
+        logger.info("=" * 60)
     except Exception as e:
         logger.error(f"\n❌ Fetch failed: {e}", exc_info=True)
         raise
