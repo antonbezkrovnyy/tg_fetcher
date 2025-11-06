@@ -71,6 +71,8 @@ class FetcherService:
         if self.config.fetch_mode == "yesterday":
             return YesterdayOnlyStrategy()
         # TODO: Implement other strategies (full, incremental, continuous, date, range)
+        # Note: This is a planned feature. For now, only 'yesterday' mode is supported.
+        # Future strategies should implement BaseFetchStrategy interface.
         else:
             raise ValueError(f"Unsupported fetch_mode: {self.config.fetch_mode}")
     

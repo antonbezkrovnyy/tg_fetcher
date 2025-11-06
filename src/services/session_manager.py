@@ -1,6 +1,6 @@
 """Telegram session management."""
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from telethon import TelegramClient
 from telethon.sessions import StringSession
@@ -91,10 +91,25 @@ class SessionManager:
             await self._client.disconnect()
             self._client = None
     
-    async def __aenter__(self):
-        """Async context manager entry."""
+    async def __aenter__(self) -> TelegramClient:
+        """Async context manager entry.
+        
+        Returns:
+            Connected and authorized TelegramClient instance
+        """
         return await self.get_client()
     
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        """Async context manager exit."""
+    async def __aexit__(
+        self,
+        exc_type: Optional[type[BaseException]],
+        exc_val: Optional[BaseException],
+        exc_tb: Optional[Any]
+    ) -> None:
+        """Async context manager exit.
+        
+        Args:
+            exc_type: Exception type if an exception was raised
+            exc_val: Exception value if an exception was raised
+            exc_tb: Exception traceback if an exception was raised
+        """
         await self.close()
