@@ -102,10 +102,10 @@
   ```bash
   # Полный сброс
   python -m src.main --reset-progress
-  
+
   # Точечный сброс для конкретного источника
   python -m src.main --reset-progress-for @ru_python
-  
+
   # Сброс за конкретную дату
   python -m src.main --reset-date 2025-11-05 --source @ru_python
   ```
@@ -377,7 +377,7 @@ FETCH_MODE=full docker-compose up fetcher
 ## Risks & Mitigations
 
 ### Risk 1: Telegram API Rate Limits
-**Mitigation:** 
+**Mitigation:**
 - Implement RateLimiter
 - Configurable delays between requests
 - Proper Flood Wait handling

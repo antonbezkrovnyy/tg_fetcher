@@ -342,24 +342,24 @@ if __name__ == "__main__":
     import atexit
     import signal
     import sys
-    
+
     def force_exit():
         """Force exit after cleanup."""
         import os
         import time
         time.sleep(0.1)
         os._exit(0)
-    
+
     def signal_handler(signum, frame):
         """Handle shutdown signals."""
         print(f'Received signal {signum}, shutting down...', flush=True)
         sys.exit(0)
-    
+
     # Регистрируем обработчики
     atexit.register(force_exit)
     signal.signal(signal.SIGTERM, signal_handler)
     signal.signal(signal.SIGINT, signal_handler)
-    
+
     try:
         asyncio.run(main())
         exit_code = 0
@@ -373,21 +373,21 @@ if __name__ == "__main__":
         # Cleanup with timeout
         import logging
         import threading
-        
+
         def shutdown_logging():
             try:
                 logging.shutdown()
             except Exception:
                 pass
-        
+
         shutdown_thread = threading.Thread(target=shutdown_logging)
         shutdown_thread.daemon = True
         shutdown_thread.start()
         shutdown_thread.join(timeout=2.0)
-        
+
         time.sleep(0.5)
-    
+
     if exit_code != 0:
         os._exit(exit_code)
-    
+
     sys.exit(exit_code)

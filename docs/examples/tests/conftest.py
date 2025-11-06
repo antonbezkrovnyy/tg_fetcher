@@ -37,13 +37,13 @@ def mock_telegram_message():
     message.text = "Test message content"
     message.reply_to_msg_id = None
     message.reactions = None
-    
+
     # Mock sender
     sender = Mock(spec=User)
     sender.id = 67890
     sender.first_name = "Test User"
     message.sender = sender
-    
+
     return message
 
 
@@ -116,13 +116,13 @@ def event_loop():
 
 class MockAsyncIterator:
     """Mock async iterator for Telegram messages."""
-    
+
     def __init__(self, items):
         self.items = iter(items)
-    
+
     def __aiter__(self):
         return self
-    
+
     async def __anext__(self):
         try:
             return next(self.items)

@@ -238,7 +238,7 @@ _Добавить сюда найденные проблемы или замет
 
 ---
 
-**Tested by:** _______________  
-**Date:** _______________  
-**Environment:** Windows / Linux / Mac  
+**Tested by:** _______________
+**Date:** _______________
+**Environment:** Windows / Linux / Mac
 **Result:** ✅ Pass / ❌ Fail

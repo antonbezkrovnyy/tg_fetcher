@@ -22,11 +22,11 @@ LOKI_URL = os.getenv('LOKI_URL', 'http://loki:3100')
 
 class LokiHandler(logging.Handler):
     """Handler для отправки логов в Loki через HTTP API."""
-    
+
     def __init__(self, url: str = None, labels: Dict[str, str] = None):
         """
         Инициализация handler.
-        
+
         Args:
             url: URL Loki сервера
             labels: Метки для логов
@@ -37,19 +37,19 @@ class LokiHandler(logging.Handler):
         self.session = requests.Session()
         self.session.headers.update({'Content-Type': 'application/json'})
         self.lock = Lock()
-        
+
         # Базовые метки
         if 'service' not in self.labels:
             self.labels['service'] = 'telegram-fetcher'
         if 'environment' not in self.labels:
             self.labels['environment'] = os.getenv('ENVIRONMENT', 'development')
-    
+
     def emit(self, record: logging.LogRecord):
         """Отправить лог в Loki."""
         try:
             # Формируем запись лога
             log_entry = self.format_log_entry(record)
-            
+
             # Отправляем в Loki
             with self.lock:
                 self.send_to_loki(log_entry)
@@ -59,36 +59,36 @@ class LokiHandler(logging.Handler):
                 sys.stderr.write(f"[loki_handler] Failed to send log to Loki: {e}\n")
             except Exception:
                 pass
-    
+
     def format_log_entry(self, record: logging.LogRecord) -> Dict[str, Any]:
         """Форматировать запись лога для Loki."""
         # Создаем копию меток и добавляем level
         labels = self.labels.copy()
         labels['level'] = record.levelname.lower()
         labels['logger'] = record.name
-        
+
         # Если есть extra поля, добавляем их как метки
         if hasattr(record, 'channel'):
             labels['channel'] = str(record.channel)
-        
+
         # Формируем сообщение
         message = self.format(record)
-        
+
         # Timestamp в наносекундах
         timestamp_ns = str(int(record.created * 1e9))
-        
+
         return {
             'labels': labels,
             'timestamp': timestamp_ns,
             'line': message
         }
-    
+
     def send_to_loki(self, log_entry: Dict[str, Any]):
         """Отправить лог в Loki."""
         # Формируем метки в формате {key1="value1",key2="value2"}
         labels_str = ','.join([f'{k}="{v}"' for k, v in log_entry['labels'].items()])
         labels_str = '{' + labels_str + '}'
-        
+
         # Формируем payload для Loki
         payload = {
             'streams': [
@@ -100,7 +100,7 @@ class LokiHandler(logging.Handler):
                 }
             ]
         }
-        
+
         try:
             response = self.session.post(
                 self.url,
@@ -115,12 +115,12 @@ class LokiHandler(logging.Handler):
 
 class BatchLokiHandler(LokiHandler):
     """Handler с батчингом для эффективной отправки логов."""
-    
-    def __init__(self, url: str = None, labels: Dict[str, str] = None, 
+
+    def __init__(self, url: str = None, labels: Dict[str, str] = None,
                  batch_size: int = 10, flush_interval: float = 5.0):
         """
         Инициализация handler с батчингом.
-        
+
         Args:
             url: URL Loki сервера
             labels: Метки для логов
@@ -137,7 +137,7 @@ class BatchLokiHandler(LokiHandler):
         # Фоновый поток для периодической отправки, чтобы не делать I/O внутри emit
         self._flusher = Thread(target=self._run_flusher, daemon=True)
         self._flusher.start()
-    
+
     def emit(self, record: logging.LogRecord):
         """Добавить лог в батч (без сетевых вызовов)."""
         try:
@@ -165,7 +165,7 @@ class BatchLokiHandler(LokiHandler):
             except Exception:
                 # Ошибки уже пишутся в stderr внутри flush
                 pass
-    
+
     def flush(self):
         """Отправить все логи из батча."""
         drained = []
@@ -181,7 +181,7 @@ class BatchLokiHandler(LokiHandler):
             self.batch.clear()
         if not drained:
             return
-        
+
         try:
             # Группируем логи по меткам
             streams = {}
@@ -196,12 +196,12 @@ class BatchLokiHandler(LokiHandler):
                     entry['timestamp'],
                     entry['line']
                 ])
-            
+
             # Формируем payload
             payload = {
                 'streams': list(streams.values())
             }
-            
+
             # Отправляем
             response = self.session.post(
                 self.url,
@@ -209,10 +209,10 @@ class BatchLokiHandler(LokiHandler):
                 timeout=5
             )
             response.raise_for_status()
-            
+
             # Отмечаем время последней успешной отправки
             self.last_flush = time.time()
-            
+
         except Exception as e:
             try:
                 sys.stderr.write(f"[loki_handler] Failed to flush logs to Loki: {e}\n")
@@ -221,7 +221,7 @@ class BatchLokiHandler(LokiHandler):
             # Очищаем батч даже при ошибке, чтобы не росла память
             self.batch.clear()
             self.last_flush = time.time()
-    
+
     def close(self):
         """Закрыть handler и отправить оставшиеся логи."""
         self._stop = True
@@ -238,10 +238,10 @@ class BatchLokiHandler(LokiHandler):
 def get_loki_handler(batch: bool = True) -> logging.Handler:
     """
     Получить handler для Loki.
-    
+
     Args:
         batch: Использовать батчинг
-        
+
     Returns:
         Loki handler
     """

@@ -46,13 +46,13 @@
 **Было:**
 ```python
 async for message in client.iter_messages(
-    entity, 
+    entity,
     offset_date=start_date,  # ❌ Начинаем с начала дня
     reverse=True              # ❌ Идём вперёд
 ):
 ```
 
-**Проблема:** 
+**Проблема:**
 - `offset_date` - это точка НАЧАЛА итерации, но мы указывали start (00:00:00)
 - `reverse=True` идёт от старых к новым, но offset_date - это "откуда начать идти назад"
 - Логика фильтрации была обратной
@@ -88,7 +88,7 @@ async for comment in client.iter_messages(entity, reply_to=message.id):
 **Решение:**
 ```python
 async for comment in client.iter_messages(
-    entity, 
+    entity,
     reply_to=message.id,
     limit=50  # ✅ Ограничение на 50 последних комментариев
 ):

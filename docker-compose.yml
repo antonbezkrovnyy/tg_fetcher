@@ -34,7 +34,7 @@ services:
 
   # === Observability Stack Services ===
   # Included from infrastructure/observability-stack
-  
+
   pushgateway:
     extends:
       file: ./infrastructure/observability-stack/docker-compose.yml

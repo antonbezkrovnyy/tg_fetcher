@@ -39,14 +39,14 @@ def get_current_task() -> Optional[str]:
 def request_shutdown(signum=None, frame=None):
     """Request graceful shutdown"""
     global _shutdown_requested
-    
+
     if _shutdown_requested:
         logger.warning("Shutdown already requested, forcing exit...")
         os._exit(1)
-    
+
     _shutdown_requested = True
     signal_name = signal.Signals(signum).name if signum else "UNKNOWN"
-    
+
     logger.warning(
         f"Shutdown requested via signal {signal_name}",
         extra={
@@ -55,7 +55,7 @@ def request_shutdown(signum=None, frame=None):
             'current_task': _current_task
         }
     )
-    
+
     if _current_task:
         logger.info(f"Will shutdown after completing: {_current_task}")
     else:
@@ -66,14 +66,14 @@ def setup_signal_handlers():
     """Setup handlers for graceful shutdown"""
     signal.signal(signal.SIGTERM, request_shutdown)
     signal.signal(signal.SIGINT, request_shutdown)
-    
+
     logger.info("Signal handlers configured for graceful shutdown")
 
 
 async def shutdown_with_timeout(coro, timeout: int = 30):
     """
     Execute coroutine with timeout for graceful shutdown
-    
+
     Args:
         coro: Coroutine to execute
         timeout: Max seconds to wait
@@ -102,7 +102,7 @@ def update_healthcheck(
 ):
     """
     Update healthcheck file
-    
+
     Args:
         status: Current status (healthy, running, error)
         current_task: Description of current task
@@ -118,11 +118,11 @@ def update_healthcheck(
             'error': error,
             'pid': os.getpid()
         }
-        
+
         HEALTHCHECK_FILE.parent.mkdir(parents=True, exist_ok=True)
         with open(HEALTHCHECK_FILE, 'w') as f:
             json.dump(health_data, f, indent=2)
-            
+
     except Exception as e:
         # Don't fail if healthcheck update fails
         logger.debug(f"Failed to update healthcheck file: {e}")
@@ -155,20 +155,20 @@ def check_health() -> dict:
                 'status': 'unknown',
                 'message': 'No healthcheck file found'
             }
-        
+
         with open(HEALTHCHECK_FILE, 'r') as f:
             data = json.load(f)
-        
+
         # Check if healthcheck is recent (within last 5 minutes)
         timestamp = datetime.fromisoformat(data['timestamp'])
         age_seconds = (datetime.now(UTC) - timestamp).total_seconds()
-        
+
         if age_seconds > 300:  # 5 minutes
             data['status'] = 'stale'
             data['age_seconds'] = age_seconds
-        
+
         return data
-        
+
     except Exception as e:
         return {
             'status': 'error',
@@ -191,30 +191,30 @@ try:
     if not HEALTHCHECK_FILE.exists():
         print("UNHEALTHY: No healthcheck file found")
         sys.exit(1)
-    
+
     with open(HEALTHCHECK_FILE, 'r') as f:
         data = json.load(f)
-    
+
     status = data.get('status', 'unknown')
     timestamp = datetime.fromisoformat(data['timestamp'])
     age_seconds = (datetime.now(UTC) - timestamp).total_seconds()
-    
+
     if age_seconds > 300:  # 5 minutes stale
         print(f"UNHEALTHY: Healthcheck stale ({age_seconds:.0f}s old)")
         sys.exit(1)
-    
+
     if status == 'error':
         print(f"UNHEALTHY: {data.get('error', 'Unknown error')}")
         sys.exit(1)
-    
+
     print(f"HEALTHY: {status} - {data.get('current_task', 'idle')}")
     sys.exit(0)
-    
+
 except Exception as e:
     print(f"UNHEALTHY: Failed to check health: {e}")
     sys.exit(1)
 """
-    
+
     healthcheck_script_path = Path("/app/healthcheck.py")
     healthcheck_script_path.write_text(script)
     healthcheck_script_path.chmod(0o755)

@@ -5,7 +5,7 @@ pytest-cov==4.1.0
 pytest-mock==3.12.0
 coverage[toml]==7.3.2
 
-# Production dependencies  
+# Production dependencies
 telethon==1.36.0
 python-dotenv==1.0.0
 python-json-logger==2.0.7

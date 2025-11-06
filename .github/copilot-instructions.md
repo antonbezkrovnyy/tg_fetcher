@@ -99,11 +99,11 @@ Endpoints, request/response formats
 ### Examples
 ```
 ❌ Bad: User says "add authentication" → Immediately creates auth code
-✅ Good: User says "add authentication" → Ask: "What type? (JWT/OAuth/Session)? 
+✅ Good: User says "add authentication" → Ask: "What type? (JWT/OAuth/Session)?
          What user model? Where to store credentials? Database choice?"
          Create TZ.md with business requirements and update after each answer
 
-❌ Bad: User says "fix bug" → Makes changes immediately  
+❌ Bad: User says "fix bug" → Makes changes immediately
 ✅ Good: User says "fix bug" → Ask: "Can you describe the bug? Expected vs actual behavior?
          Do you have error logs? Let me analyze the code first"
 
@@ -235,14 +235,14 @@ from typing import Optional
 
 def process_data(input_value: str, max_length: Optional[int] = None) -> dict[str, Any]:
     """Process input data and return structured result.
-    
+
     Args:
         input_value: The raw input string to process
         max_length: Optional maximum length for truncation
-    
+
     Returns:
         Dictionary containing processed data with 'result' and 'metadata' keys
-        
+
     Raises:
         ValueError: If input_value is empty
     """
@@ -271,10 +271,10 @@ def test_user_activation(mock_user_repository):
     user = User(id=1, active=False)
     mock_user_repository.get_by_id.return_value = user
     service = UserService(mock_user_repository)
-    
+
     # Act
     service.activate_user(user.id)
-    
+
     # Assert
     assert user.active is True
     mock_user_repository.save.assert_called_once_with(user)
@@ -290,7 +290,7 @@ def test_user_activation(mock_user_repository):
 7. Ensure CI passes before merging
 
 ### Git Workflow
-- **Branch Naming**: 
+- **Branch Naming**:
   - `feature/short-description` - New features
   - `bugfix/issue-number-description` - Bug fixes
   - `hotfix/critical-issue` - Production hotfixes
@@ -304,7 +304,7 @@ def test_user_activation(mock_user_repository):
   test: add integration tests for payments
   chore: update dependencies
   ```
-- **Pull Request**: 
+- **Pull Request**:
   - Use descriptive titles
   - Link related issues
   - Request reviews before merging
@@ -373,11 +373,11 @@ docker exec -it <container> bash # Enter container shell
 
 ## Observability & Monitoring
 - **Stack**: Use [observability-stack](https://github.com/antonbezkrovnyy/observability-stack) for centralized logging and metrics
-- **Logging**: 
+- **Logging**:
   - Structure logs in JSON format for easier parsing
   - Include correlation IDs for request tracing
   - Use appropriate log levels (DEBUG, INFO, WARNING, ERROR, CRITICAL)
-- **Metrics**: 
+- **Metrics**:
   - Export application metrics (counters, gauges, histograms)
   - Monitor performance, errors, and business metrics
   - Integrate with observability-stack's Prometheus/Grafana setup
@@ -430,17 +430,17 @@ logger.info(json.dumps({
 # Good: Single Responsibility, Information Expert
 class UserRepository:
     """Handles user data persistence."""
-    
+
     def get_by_id(self, user_id: int) -> User:
         """Retrieve user by ID."""
         pass
 
 class UserService:
     """Business logic for user operations."""
-    
+
     def __init__(self, repo: UserRepository):
         self._repo = repo  # Dependency Inversion
-    
+
     def activate_user(self, user_id: int) -> None:
         """Activate user account."""
         user = self._repo.get_by_id(user_id)
@@ -581,7 +581,7 @@ from pydantic import BaseModel, Field, validator
 class UserCreate(BaseModel):
     email: str = Field(..., regex=r"^[\w\.-]+@[\w\.-]+\.\w+$")
     age: int = Field(..., ge=0, le=150)
-    
+
     @validator('email')
     def email_must_be_lowercase(cls, v):
         return v.lower()

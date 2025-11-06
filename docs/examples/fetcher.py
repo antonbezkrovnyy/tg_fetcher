@@ -17,7 +17,7 @@ except ImportError:
     # Fallback for when observability module is not available
     class MetricsExporter:
         def record_messages_fetched(self, *args, **kwargs): pass
-        def record_fetch_duration(self, *args, **kwargs): pass  
+        def record_fetch_duration(self, *args, **kwargs): pass
         def update_last_fetch_timestamp(self, *args, **kwargs): pass
         def update_progress_date(self, *args, **kwargs): pass
         def record_fetch_error(self, *args, **kwargs): pass
@@ -26,7 +26,7 @@ except ImportError:
 # Load configuration
 config = load_config()
 
-# Configuration-based initialization  
+# Configuration-based initialization
 DATA_DIR = config.data_dir
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 PROGRESS_FILE = DATA_DIR / "progress.json"
@@ -43,7 +43,7 @@ async def fetch_day(client: TelegramClient, channel_username: str, day_date: dat
     """
     start_time = time.time()
     print(f"Fetching {channel_username} for {day_date.isoformat()}...")
-    
+
     try:
         entity = await client.get_entity(channel_username)
 
@@ -93,16 +93,16 @@ async def fetch_day(client: TelegramClient, channel_username: str, day_date: dat
 
         save_json(filepath, result, ensure_ascii=False, indent=2)
         print(f"  → Saved {len(messages)} messages to {filepath}")
-        
+
         # Записываем метрики
         duration = time.time() - start_time
         metrics.record_messages_fetched(channel_username, len(messages))
         metrics.record_fetch_duration(channel_username, duration)
         metrics.update_last_fetch_timestamp(channel_username, time.time())
         metrics.update_progress_date(channel_username, start.timestamp())
-        
+
         return len(messages)
-    
+
     except Exception as e:
         # Записываем ошибку в метрики
         error_type = type(e).__name__
@@ -113,7 +113,7 @@ async def fetch_day(client: TelegramClient, channel_username: str, day_date: dat
 async def main():
     # Initialize rate limiter from config
     rate_limiter = RateLimiter(calls_per_second=config.rate_limit.calls_per_second)
-    
+
     # Use session directory from config
     session_file = config.session_dir / "session_digest"
     client = TelegramClient(str(session_file), config.api_id, config.api_hash)
@@ -170,38 +170,38 @@ async def main():
         cursor = start_date
         consecutive_failures = 0
         max_consecutive_failures = 3
-        
+
         while cursor <= yesterday:
             try:
                 # Apply rate limiting before each API call
                 await rate_limiter.acquire()
-                
+
                 result = await handle_flood_wait_direct(fetch_day, client, ch, cursor)
-                
+
                 # persist progress (mark this date as last parsed)
                 progress[ch] = cursor.isoformat()
                 with PROGRESS_FILE.open('w', encoding='utf-8') as pf:
                     json.dump(progress, pf, ensure_ascii=False, indent=2)
-                
+
                 # Записываем успешную обработку канала
                 metrics.record_channel_processed()
-                
+
                 # Reset failure counter on success
                 consecutive_failures = 0
-                
+
             except Exception as e:
                 consecutive_failures += 1
                 print(f"Error fetching {ch} for {cursor.isoformat()} (attempt {consecutive_failures}): {e}")
-                
+
                 # If too many consecutive failures, skip this channel
                 if consecutive_failures >= max_consecutive_failures:
                     print(f"Too many consecutive failures for {ch}, skipping remaining dates")
                     break
-                
+
                 # For non-consecutive failures, just skip this date and continue
                 if consecutive_failures == 1:
                     print(f"Skipping date {cursor.isoformat()} for {ch}, continuing with next date")
-            
+
             cursor = cursor + timedelta(days=1)
 
     await client.disconnect()

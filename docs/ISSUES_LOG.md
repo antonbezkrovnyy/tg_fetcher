@@ -25,7 +25,7 @@ RecursionError: maximum recursion depth exceeded while calling a Python object
 # В src/observability/logging_config.py
 class NoLoopFilter(logging.Filter):
     """Prevent logging loops by filtering out logs from HTTP libraries."""
-    
+
     def filter(self, record: logging.LogRecord) -> bool:
         # Exclude logs from urllib3 and requests to prevent recursion
         return not record.name.startswith(('urllib3', 'requests'))
@@ -129,7 +129,7 @@ async for comment in client.iter_messages(entity=entity, reply_to=message.id):
 ```python
 # ✅ ИСПРАВЛЕНО
 async for comment in client.iter_messages(
-    entity=entity, 
+    entity=entity,
     reply_to=message.id,
     limit=50  # Ограничение на комментарии к одному сообщению
 ):
@@ -167,7 +167,7 @@ Pydantic Settings v2 автоматически парсит JSON из environme
 # ❌ НЕПРАВИЛЬНО
 TELEGRAM_CHATS=@ru_python,@pythonstepikchat
 
-# ✅ ПРАВИЛЬНО  
+# ✅ ПРАВИЛЬНО
 TELEGRAM_CHATS=["@ru_python","@pythonstepikchat"]
 ```
 

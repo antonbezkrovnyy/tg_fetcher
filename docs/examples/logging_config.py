@@ -24,15 +24,15 @@ def setup_logging(level=None, enable_console=True, enable_file=True, enable_loki
     logger = logging.getLogger()
     logger.setLevel(getattr(logging, log_level))
     logger.handlers.clear()
-    
+
     formatter = CustomJsonFormatter('%(timestamp)s %(level)s %(name)s %(message)s')
-    
+
     if enable_console:
         console_handler = logging.StreamHandler(sys.stdout)
         console_handler.setLevel(getattr(logging, log_level))
         console_handler.setFormatter(formatter)
         logger.addHandler(console_handler)
-    
+
     if enable_file and os.path.exists(log_dir):
         try:
             log_file = os.path.join(log_dir, f"fetcher-{datetime.now(UTC).strftime('%Y%m%d')}.log")
@@ -42,7 +42,7 @@ def setup_logging(level=None, enable_console=True, enable_file=True, enable_loki
             logger.addHandler(file_handler)
         except Exception as e:
             logger.warning(f"Could not create file handler: {e}")
-    
+
     if enable_loki:
         try:
             from loki_handler import get_loki_handler
@@ -70,7 +70,7 @@ def setup_logging(level=None, enable_console=True, enable_file=True, enable_loki
             logger.addHandler(loki_handler)
         except Exception as e:
             logger.warning(f"Could not create Loki handler: {e}")
-    
+
     logger.info("Logging configured", extra={'log_level': log_level, 'console_enabled': enable_console, 'file_enabled': enable_file, 'loki_enabled': enable_loki})
     return logger
 

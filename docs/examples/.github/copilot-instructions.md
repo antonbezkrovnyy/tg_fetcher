@@ -8,7 +8,7 @@ This is a **Telegram message fetcher microservice** with a **Strategy Pattern** 
 
 - **`FetcherService`** (`fetcher_service.py`) - Main orchestrator using Strategy pattern
 - **`FetchStrategy`** - Abstract base for different fetching modes:
-  - `ContinuousFetchStrategy` - Fetch from last checkpoint to today  
+  - `ContinuousFetchStrategy` - Fetch from last checkpoint to today
   - `YesterdayFetchStrategy` - Fetch only yesterday's messages
 - **`FetcherConfig`** (`config.py`) - Configuration with validation and multiple sources
 - **`StandardMetrics`** (`common_observability.py`) - Unified observability with fallbacks
@@ -97,7 +97,7 @@ python unified_fetcher.py --mode continuous --channels channel1,channel2
 
 ### File Organization
 - **Legacy files**: `fetcher.py`, `fetch_yesterday.py` (being replaced)
-- **Current entry points**: `new_fetcher.py`, `new_fetch_yesterday.py`  
+- **Current entry points**: `new_fetcher.py`, `new_fetch_yesterday.py`
 - **Unified future**: `unified_fetcher.py` with CLI args
 
 ### Progress Tracking
@@ -118,7 +118,7 @@ This codebase has **extensive fallbacks** for missing dependencies:
 
 - **Telethon**: Telegram API client (sessions in `session_dir`)
 - **Prometheus**: Metrics (optional, has fallbacks)
-- **Loki**: Logging (optional, has fallbacks)  
+- **Loki**: Logging (optional, has fallbacks)
 - **Docker**: Containerized deployment with volumes for `/data` and `/sessions`
 
 ## Common Gotchas
