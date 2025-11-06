@@ -1,266 +1,434 @@
-"""Main fetcher service orchestrator."""
-import asyncio
-from datetime import datetime, timezone
-from typing import Any, Dict, List
+"""Telegram Fetcher Service with Pydantic models and full features.
+
+Main orchestrator for fetching messages from Telegram with reactions,
+comments, and progress tracking.
+"""
+
+import logging
+from datetime import date, datetime, timezone
+from typing import Optional
 
 from telethon import TelegramClient
-from telethon.tl.types import Message, User, Channel, Chat
+from telethon.tl.types import Channel, Chat, User, MessageReactions
 
 from src.core.config import FetcherConfig
-from src.observability.logging_config import get_logger
+from src.models.schemas import (
+    Message,
+    MessageCollection,
+    Reaction,
+    ForwardInfo,
+    SourceInfo,
+)
 from src.repositories.message_repository import MessageRepository
 from src.services.session_manager import SessionManager
 from src.services.strategy.base import BaseFetchStrategy
 from src.services.strategy.yesterday import YesterdayOnlyStrategy
 
-
-logger = get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 
 class FetcherService:
-    """Main service for fetching Telegram messages.
+    """Main service for fetching Telegram messages with full metadata.
     
-    Orchestrates session management, strategy execution, and data persistence.
+    Coordinates session management, strategy execution, and data persistence.
     """
     
     def __init__(self, config: FetcherConfig):
-        """Initialize FetcherService.
+        """Initialize fetcher service.
         
         Args:
-            config: Service configuration
+            config: Validated FetcherConfig instance
         """
         self.config = config
-        self.session_manager = SessionManager(
-            api_id=config.api_id,
-            api_hash=config.api_hash,
-            phone=config.phone,
-            session_dir=config.session_dir,
+        self.session_manager = SessionManager(config)
+        self.repository = MessageRepository(config.data_dir)
+        
+        # Select strategy based on fetch mode
+        self.strategy = self._create_strategy()
+        
+        logger.info(
+            f"FetcherService initialized",
+            extra={
+                "strategy": self.strategy.get_strategy_name(),
+                "sources": self.config.telegram_chats
+            }
         )
-        self.repository = MessageRepository(data_dir=config.data_dir)
-        self.strategy = self._get_strategy()
     
-    def _get_strategy(self) -> BaseFetchStrategy:
-        """Get fetch strategy based on configuration.
+    def _create_strategy(self) -> BaseFetchStrategy:
+        """Create fetch strategy based on config.
         
         Returns:
             Strategy instance
+            
+        Raises:
+            ValueError: If fetch_mode is not supported
         """
         if self.config.fetch_mode == "yesterday":
             return YesterdayOnlyStrategy()
-        # Future: add other strategies
+        # TODO: Implement other strategies (full, incremental, continuous, date, range)
         else:
-            raise ValueError(f"Unsupported fetch mode: {self.config.fetch_mode}")
+            raise ValueError(f"Unsupported fetch_mode: {self.config.fetch_mode}")
     
     async def run(self) -> None:
-        """Run the fetcher service."""
-        logger.info(
-            "Starting Telegram Fetcher Service",
-            extra={
-                "mode": self.config.fetch_mode,
-                "chats": self.config.chats,
-                "strategy": self.strategy.get_strategy_name(),
-            },
-        )
-        
-        client = await self.session_manager.get_client()
-        
-        try:
-            for chat_identifier in self.config.chats:
-                await self._process_chat(client, chat_identifier)
-        finally:
-            await self.session_manager.close()
-        
-        logger.info("Fetcher service completed successfully")
+        """Run fetcher service for all configured chats."""
+        async with self.session_manager.get_client() as client:
+            for chat_identifier in self.config.telegram_chats:
+                try:
+                    await self._process_chat(client, chat_identifier)
+                except Exception as e:
+                    logger.error(
+                        f"Failed to process chat {chat_identifier}: {e}",
+                        extra={"chat": chat_identifier},
+                        exc_info=True
+                    )
     
-    async def _process_chat(
-        self, client: TelegramClient, chat_identifier: str
-    ) -> None:
-        """Process a single chat/channel.
+    async def _process_chat(self, client: TelegramClient, chat_identifier: str) -> None:
+        """Process single chat/channel.
         
         Args:
-            client: Telegram client
+            client: Authenticated Telegram client
             chat_identifier: Chat username or ID
         """
-        logger.info("Processing chat", extra={"chat": chat_identifier})
+        logger.info(f"Processing chat: {chat_identifier}")
         
-        try:
-            # Get chat entity
-            entity = await client.get_entity(chat_identifier)
-            
-            # Get source info
-            source_info = self._extract_source_info(entity, chat_identifier)
-            
-            # Process each date range from strategy
-            async for start_date, end_date in self.strategy.get_date_ranges(
-                client, chat_identifier
-            ):
-                await self._process_date_range(
-                    client, entity, source_info, start_date, end_date
-                )
+        # Get entity (channel, chat, or user)
+        entity = await client.get_entity(chat_identifier)
         
-        except Exception as e:
-            logger.error(
-                "Failed to process chat",
-                extra={"chat": chat_identifier, "error": str(e)},
-                exc_info=True,
+        # Extract source info
+        source_info = self._extract_source_info(entity, chat_identifier)
+        
+        # Get date ranges from strategy
+        for start_date, end_date in self.strategy.get_date_ranges():
+            await self._process_date_range(
+                client,
+                entity,
+                source_info,
+                start_date,
+                end_date
             )
-            raise
     
     async def _process_date_range(
         self,
         client: TelegramClient,
-        entity: Any,
-        source_info: Dict[str, Any],
-        start_date,
-        end_date,
+        entity,
+        source_info: SourceInfo,
+        start_date: date,
+        end_date: date
     ) -> None:
         """Process messages for a date range.
         
         Args:
             client: Telegram client
-            entity: Chat/channel entity
+            entity: Channel/chat entity
             source_info: Source metadata
-            start_date: Start date
-            end_date: End date
+            start_date: Start date (inclusive)
+            end_date: End date (inclusive)
         """
         logger.info(
-            "Fetching messages for date range",
+            f"Fetching messages for {source_info.id}",
             extra={
-                "source": source_info["id"],
+                "source": source_info.id,
                 "start_date": start_date.isoformat(),
-                "end_date": end_date.isoformat(),
-            },
+                "end_date": end_date.isoformat()
+            }
         )
         
-        # For yesterday-only strategy, start_date == end_date
-        # We fetch all messages for that single day
-        messages = []
-        senders = {}
-        
-        # Calculate datetime boundaries for the date
-        offset_start = datetime.combine(
-            start_date, datetime.min.time(), tzinfo=timezone.utc
-        )
-        offset_end = datetime.combine(
-            end_date, datetime.max.time(), tzinfo=timezone.utc
+        # Create collection for this date
+        collection = self.repository.create_collection(
+            source_info=source_info,
+            messages=[]
         )
         
-        # Fetch messages for the date range
+        # Fetch messages for date range
+        messages_fetched = 0
+        
         async for message in client.iter_messages(
             entity,
-            offset_date=offset_end,
-            reverse=False,
+            offset_date=datetime.combine(end_date, datetime.max.time()).replace(tzinfo=timezone.utc),
+            reverse=True
         ):
-            if message.date.date() < start_date:
+            # Check if message is within our date range
+            msg_date = message.date.date()
+            if msg_date < start_date:
+                continue
+            if msg_date > end_date:
                 break
             
-            if message.date.date() > end_date:
-                continue
+            # Extract message data with reactions and comments
+            message_data = await self._extract_message_data(client, entity, message)
+            collection.messages.append(message_data)
             
-            # Extract message data
-            msg_data = self._extract_message_data(message)
-            messages.append(msg_data)
-            
-            # Collect sender info
-            if message.sender:
-                sender_id = message.sender_id
+            # Add sender to senders map
+            if message_data.sender_id:
                 sender_name = self._get_sender_name(message.sender)
-                senders[str(sender_id)] = sender_name
+                collection.add_sender(message_data.sender_id, sender_name)
+            
+            messages_fetched += 1
         
-        logger.info(
-            "Fetched messages",
-            extra={
-                "source": source_info["id"],
-                "date": start_date.isoformat(),
-                "count": len(messages),
-            },
-        )
-        
-        # Save to repository
-        if messages:
-            self.repository.save_messages(
-                source_name=source_info["id"],
+        # Save collection
+        if messages_fetched > 0:
+            self.repository.save_collection(
+                source_name=source_info.id,
                 target_date=start_date,
-                source_info=source_info,
-                messages=messages,
-                senders=senders,
+                collection=collection
+            )
+            
+            logger.info(
+                f"Saved {messages_fetched} messages",
+                extra={
+                    "source": source_info.id,
+                    "date": start_date.isoformat(),
+                    "count": messages_fetched
+                }
             )
         else:
             logger.info(
-                "No messages found for date",
-                extra={"source": source_info["id"], "date": start_date.isoformat()},
+                f"No messages found for {source_info.id} on {start_date}",
+                extra={"source": source_info.id, "date": start_date.isoformat()}
             )
     
-    def _extract_source_info(self, entity: Any, identifier: str) -> Dict[str, Any]:
+    async def _extract_message_data(
+        self,
+        client: TelegramClient,
+        entity,
+        message
+    ) -> Message:
+        """Extract message data into Pydantic model with reactions and comments.
+        
+        Args:
+            client: Telegram client
+            entity: Source entity
+            message: Telethon message object
+            
+        Returns:
+            Message model instance
+        """
+        # Extract reactions
+        reactions = await self._extract_reactions(message)
+        
+        # Extract comments (for channels with discussion groups)
+        comments = await self._extract_comments(client, entity, message)
+        
+        # Extract forward info
+        forward_info = self._extract_forward_info(message)
+        
+        return Message(
+            id=message.id,
+            date=message.date,
+            text=message.message or None,
+            sender_id=message.sender_id,
+            reply_to_msg_id=message.reply_to_msg_id,
+            forward_from=forward_info,
+            reactions=reactions,
+            comments=comments
+        )
+    
+    async def _extract_reactions(self, message) -> list[Reaction]:
+        """Extract reactions from message.
+        
+        Args:
+            message: Telethon message object
+            
+        Returns:
+            List of Reaction models
+        """
+        reactions_list = []
+        
+        if not hasattr(message, 'reactions') or message.reactions is None:
+            return reactions_list
+        
+        try:
+            if isinstance(message.reactions, MessageReactions):
+                for reaction in message.reactions.results:
+                    # Get emoji from reaction
+                    emoji = None
+                    if hasattr(reaction, 'reaction'):
+                        if hasattr(reaction.reaction, 'emoticon'):
+                            emoji = reaction.reaction.emoticon
+                        elif isinstance(reaction.reaction, str):
+                            emoji = reaction.reaction
+                    
+                    if emoji and hasattr(reaction, 'count'):
+                        reactions_list.append(
+                            Reaction(
+                                emoji=emoji,
+                                count=reaction.count,
+                                users=None  # User list not available in basic API
+                            )
+                        )
+        except Exception as e:
+            logger.warning(
+                f"Failed to extract reactions from message {message.id}: {e}",
+                extra={"message_id": message.id}
+            )
+        
+        return reactions_list
+    
+    async def _extract_comments(
+        self,
+        client: TelegramClient,
+        entity,
+        message
+    ) -> list[Message]:
+        """Extract comments from channel post discussion.
+        
+        Args:
+            client: Telegram client
+            entity: Channel entity
+            message: Channel message
+            
+        Returns:
+            List of Message models representing comments
+        """
+        comments_list = []
+        
+        # Check if message has replies (discussion thread)
+        if not hasattr(message, 'replies') or message.replies is None:
+            return comments_list
+        
+        if message.replies.replies == 0:
+            return comments_list
+        
+        try:
+            # Get discussion message if this is a channel with linked discussion group
+            if isinstance(entity, Channel) and hasattr(message.replies, 'channel_id'):
+                # Fetch comments from discussion group
+                async for comment in client.iter_messages(
+                    message.replies.channel_id,
+                    reply_to=message.replies.max_id
+                ):
+                    # Recursively extract comment data (without nested comments)
+                    comment_data = Message(
+                        id=comment.id,
+                        date=comment.date,
+                        text=comment.message or None,
+                        sender_id=comment.sender_id,
+                        reply_to_msg_id=comment.reply_to_msg_id,
+                        forward_from=self._extract_forward_info(comment),
+                        reactions=await self._extract_reactions(comment),
+                        comments=[]  # No nested comments
+                    )
+                    comments_list.append(comment_data)
+        except Exception as e:
+            logger.warning(
+                f"Failed to extract comments from message {message.id}: {e}",
+                extra={"message_id": message.id}
+            )
+        
+        return comments_list
+    
+    def _extract_forward_info(self, message) -> Optional[ForwardInfo]:
+        """Extract forward information from message.
+        
+        Args:
+            message: Telethon message object
+            
+        Returns:
+            ForwardInfo model if message is forwarded, None otherwise
+        """
+        if not hasattr(message, 'forward') or message.forward is None:
+            return None
+        
+        try:
+            forward = message.forward
+            
+            from_id = None
+            from_name = None
+            forward_date = None
+            
+            if hasattr(forward, 'from_id'):
+                from_id = forward.from_id.user_id if hasattr(forward.from_id, 'user_id') else None
+            
+            if hasattr(forward, 'from_name'):
+                from_name = forward.from_name
+            
+            if hasattr(forward, 'date'):
+                forward_date = forward.date
+            
+            return ForwardInfo(
+                from_id=from_id,
+                from_name=from_name,
+                date=forward_date
+            )
+        except Exception as e:
+            logger.warning(
+                f"Failed to extract forward info from message {message.id}: {e}",
+                extra={"message_id": message.id}
+            )
+            return None
+    
+    def _extract_source_info(self, entity, chat_identifier: str) -> SourceInfo:
         """Extract source information from entity.
         
         Args:
-            entity: Telegram entity
-            identifier: Original identifier used
+            entity: Telegram entity (Channel, Chat, or User)
+            chat_identifier: Original chat identifier string
             
         Returns:
-            Dictionary with id, title, url
+            SourceInfo model
         """
+        source_id = chat_identifier
+        title = "Unknown"
+        source_type = "unknown"
+        url = ""
+        
         if isinstance(entity, Channel):
-            username = entity.username or identifier
-            return {
-                "id": f"@{username}" if not username.startswith("@") else username,
-                "title": entity.title,
-                "url": f"https://t.me/{username.lstrip('@')}",
-            }
+            title = entity.title
+            source_type = "channel"
+            if entity.username:
+                source_id = f"@{entity.username}"
+                url = f"https://t.me/{entity.username}"
+            else:
+                source_id = f"channel_{entity.id}"
+                url = f"https://t.me/c/{entity.id}"
+        
         elif isinstance(entity, Chat):
-            return {
-                "id": identifier,
-                "title": entity.title,
-                "url": None,
-            }
-        else:
-            return {
-                "id": identifier,
-                "title": str(entity),
-                "url": None,
-            }
-    
-    def _extract_message_data(self, message: Message) -> Dict[str, Any]:
-        """Extract message data into schema format.
+            title = entity.title
+            source_type = "chat" if not entity.megagroup else "group"
+            source_id = f"chat_{entity.id}"
+            url = f"https://t.me/c/{entity.id}"
         
-        Args:
-            message: Telegram message object
-            
-        Returns:
-            Message dictionary matching schema
-        """
-        # Basic message data
-        data = {
-            "id": message.id,
-            "date": message.date.isoformat(),
-            "text": message.text or "",
-            "sender_id": message.sender_id,
-            "reply_to_msg_id": message.reply_to_msg_id,
-            "forward_from": None,  # TODO: implement forward info
-            "reactions": {},  # TODO: implement reactions
-            "comments": [],  # TODO: implement comments
-        }
+        elif isinstance(entity, User):
+            title = self._get_sender_name(entity)
+            source_type = "chat"
+            if entity.username:
+                source_id = f"@{entity.username}"
+                url = f"https://t.me/{entity.username}"
+            else:
+                source_id = f"user_{entity.id}"
         
-        return data
+        return SourceInfo(
+            id=source_id,
+            title=title,
+            url=url,
+            type=source_type
+        )
     
-    def _get_sender_name(self, sender: Any) -> str:
+    def _get_sender_name(self, sender) -> str:
         """Get display name for sender.
         
         Args:
-            sender: Sender object
+            sender: Sender entity (User, Channel, etc.)
             
         Returns:
-            Display name
+            Display name string
         """
+        if sender is None:
+            return "Unknown"
+        
         if isinstance(sender, User):
-            if sender.first_name and sender.last_name:
-                return f"{sender.first_name} {sender.last_name}"
-            elif sender.first_name:
-                return sender.first_name
-            elif sender.username:
+            parts = []
+            if sender.first_name:
+                parts.append(sender.first_name)
+            if sender.last_name:
+                parts.append(sender.last_name)
+            if parts:
+                return " ".join(parts)
+            if sender.username:
                 return f"@{sender.username}"
-            else:
-                return f"User{sender.id}"
-        else:
-            return str(sender)
+            return f"User_{sender.id}"
+        
+        elif isinstance(sender, (Channel, Chat)):
+            return sender.title or f"Channel_{sender.id}"
+        
+        return "Unknown"
