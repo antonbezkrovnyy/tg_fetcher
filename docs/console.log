@@ -1,0 +1,19 @@
+# Console Commands Log
+# This file contains all terminal commands executed during project development
+# Format: [YYYY-MM-DD HH:MM:SS] command - description
+
+[2025-11-06 Initial Setup] git init - Инициализация Git репозитория
+[2025-11-06 Initial Setup] git add . - Добавление всех файлов в staging area
+[2025-11-06 Initial Setup] git commit -m "chore: initial project structure setup" - Создание первого коммита с базовой структурой проекта
+[2025-11-06 Initial Setup] git status - Проверка статуса Git репозитория
+[2025-11-06 Dependencies] pip install -r requirements-dev.txt - Установка dev зависимостей с обновленными версиями
+[2025-11-06 Dependencies] git add requirements-dev.txt - Добавление исправленного файла зависимостей
+[2025-11-06 Dependencies] git commit -m "fix: update dependencies to resolve version conflicts" - Коммит исправленных зависимостей
+[2025-11-06 Security] $env:PYTHONUTF8=1; pip-audit - Запуск pip-audit с принудительной UTF-8 кодировкой
+[2025-11-06 Security] python -m pip install --upgrade pip - Обновление pip до безопасной версии
+[2025-11-06 Security] $env:PYTHONUTF8=1; pip-audit - Проверка безопасности зависимостей после обновления pip
+[2025-11-06 Dev Scripts] .\scripts\dev.ps1 help - Проверка работы скрипта разработчика
+[2025-11-06 Dev Scripts] git add . - Добавление всех изменений
+[2025-11-06 Dev Scripts] git commit -m "feat: add development scripts and fix pip-audit encoding issue" - Коммит скриптов разработчика и обновленного README
+[2025-11-06 Documentation] git add . - Добавление правила логирования команд
+[2025-11-06 Documentation] git commit -m "docs: add command logging rule and console.log file" - Коммит правила логирования команд и файла console.log
