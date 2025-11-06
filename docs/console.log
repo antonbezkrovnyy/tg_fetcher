@@ -27,3 +27,5 @@
 [2025-11-06 Documentation] git add docs/console.log - Добавление финальной команды
 [2025-11-06 Documentation] git commit -m "docs: add final command to console.log" - Добавление финальной команды в console.log
 [2025-11-06 Documentation] git log --oneline -10 - Просмотр последних 10 коммитов
+[2025-11-06 Documentation] git add docs/console.log - Синхронизация console.log
+[2025-11-06 Documentation] git commit -m "docs: sync console.log" - Синхронизация console.log с последними командами
