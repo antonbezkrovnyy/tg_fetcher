@@ -28,9 +28,13 @@ async def main() -> int:
         
     except ValidationError as e:
         print(f"Configuration validation error:\n{e}", file=sys.stderr)
+        import traceback
+        traceback.print_exc()
         return 1
     except Exception as e:
         print(f"Failed to load configuration: {e}", file=sys.stderr)
+        import traceback
+        traceback.print_exc()
         return 1
     
     # Setup logging

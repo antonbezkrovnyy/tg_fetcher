@@ -5,7 +5,7 @@ comments, and progress tracking.
 """
 
 import logging
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timezone, timedelta
 from typing import Optional
 
 from telethon import TelegramClient
@@ -40,7 +40,12 @@ class FetcherService:
             config: Validated FetcherConfig instance
         """
         self.config = config
-        self.session_manager = SessionManager(config)
+        self.session_manager = SessionManager(
+            api_id=config.telegram_api_id,
+            api_hash=config.telegram_api_hash,
+            phone=config.telegram_phone,
+            session_dir=config.session_dir
+        )
         self.repository = MessageRepository(config.data_dir)
         
         # Select strategy based on fetch mode
@@ -71,7 +76,7 @@ class FetcherService:
     
     async def run(self) -> None:
         """Run fetcher service for all configured chats."""
-        async with self.session_manager.get_client() as client:
+        async with self.session_manager as client:
             for chat_identifier in self.config.telegram_chats:
                 try:
                     await self._process_chat(client, chat_identifier)
@@ -98,7 +103,7 @@ class FetcherService:
         source_info = self._extract_source_info(entity, chat_identifier)
         
         # Get date ranges from strategy
-        for start_date, end_date in self.strategy.get_date_ranges():
+        async for start_date, end_date in self.strategy.get_date_ranges(client, entity):
             await self._process_date_range(
                 client,
                 entity,
@@ -142,16 +147,55 @@ class FetcherService:
         # Fetch messages for date range
         messages_fetched = 0
         
-        async for message in client.iter_messages(
-            entity,
-            offset_date=datetime.combine(end_date, datetime.max.time()).replace(tzinfo=timezone.utc),
-            reverse=True
-        ):
-            # Check if message is within our date range
-            msg_date = message.date.date()
-            if msg_date < start_date:
+        # Calculate date range boundaries
+        # start = beginning of start_date (00:00:00 UTC)
+        # end = beginning of day after end_date (00:00:00 UTC next day)
+        start_datetime = datetime.combine(start_date, datetime.min.time()).replace(tzinfo=timezone.utc)
+        end_datetime = datetime.combine(end_date + timedelta(days=1), datetime.min.time()).replace(tzinfo=timezone.utc)
+        
+        logger.info(
+            f"Fetching messages for date range",
+            extra={
+                "source": source_info.id,
+                "start_date": start_date.isoformat(),
+                "end_date": end_date.isoformat(),
+                "start_datetime": start_datetime.isoformat(),
+                "end_datetime": end_datetime.isoformat()
+            }
+        )
+        
+        # Iterate through messages using offset_date (like in reference implementation)
+        # offset_date=end means "start from this date and go backwards"
+        # reverse=False is default (newest to oldest)
+        
+        logger.info(f"Starting message iteration for {source_info.id}")
+        messages_processed = 0
+        
+        async for message in client.iter_messages(entity, offset_date=end_datetime, reverse=False):
+            if not message.date:
                 continue
-            if msg_date > end_date:
+                
+            msg_datetime = message.date
+            
+            # Log every 10 messages to track progress
+            if messages_processed % 10 == 0 and messages_processed > 0:
+                logger.info(
+                    f"Processed {messages_processed} messages for {source_info.id}, "
+                    f"fetched {messages_fetched}, current msg date: {msg_datetime}"
+                )
+            
+            messages_processed += 1
+            
+            # Skip messages that are >= end (from next day onwards)
+            if msg_datetime >= end_datetime:
+                continue
+            
+            # Stop when we reach messages before our start date
+            if msg_datetime < start_datetime:
+                logger.info(
+                    f"Reached start date boundary, stopping. "
+                    f"Processed {messages_processed} messages, fetched {messages_fetched}"
+                )
                 break
             
             # Extract message data with reactions and comments
@@ -292,10 +336,12 @@ class FetcherService:
         try:
             # Get discussion message if this is a channel with linked discussion group
             if isinstance(entity, Channel) and hasattr(message.replies, 'channel_id'):
-                # Fetch comments from discussion group
+                # Fetch comments from discussion group (limit to 50 comments per message)
+                comment_count = 0
                 async for comment in client.iter_messages(
                     message.replies.channel_id,
-                    reply_to=message.replies.max_id
+                    reply_to=message.replies.max_id,
+                    limit=50  # Limit comments to prevent hanging
                 ):
                     # Recursively extract comment data (without nested comments)
                     comment_data = Message(
@@ -309,6 +355,12 @@ class FetcherService:
                         comments=[]  # No nested comments
                     )
                     comments_list.append(comment_data)
+                    comment_count += 1
+                
+                if comment_count > 0:
+                    logger.debug(
+                        f"Fetched {comment_count} comments for message {message.id}"
+                    )
         except Exception as e:
             logger.warning(
                 f"Failed to extract comments from message {message.id}: {e}",

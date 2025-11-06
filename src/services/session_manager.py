@@ -39,7 +39,9 @@ class SessionManager:
         self.session_dir.mkdir(parents=True, exist_ok=True)
         
         self._client: Optional[TelegramClient] = None
-        self._session_file = self.session_dir / f"session_{phone}.session"
+        # Remove + from phone for safe filename
+        safe_phone = phone.replace('+', '')
+        self._session_file = self.session_dir / f"session_{safe_phone}.session"
     
     async def get_client(self) -> TelegramClient:
         """Get or create Telegram client.

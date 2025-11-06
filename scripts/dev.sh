@@ -65,6 +65,10 @@ case "$COMMAND" in
         echo "Running Telegram Fetcher..."
         python -m src
         ;;
+    auth)
+        echo "Authorizing Telegram session..."
+        python scripts/authorize_session.py
+        ;;
     docker-build)
         echo "Building Docker image..."
         docker build -t telegram-fetcher:latest .
@@ -118,6 +122,7 @@ Testing & Quality:
 
 Application:
   run          - Run Telegram Fetcher locally
+  auth         - Authorize Telegram session (interactive)
   setup-env    - Create .env from .env.example
 
 Docker:
@@ -137,6 +142,7 @@ Usage: ./scripts/dev.sh <command>
 Examples:
   ./scripts/dev.sh setup-env     # First time setup
   ./scripts/dev.sh install       # Install dependencies
+  ./scripts/dev.sh auth          # Authorize Telegram session
   ./scripts/dev.sh run           # Run locally
   ./scripts/dev.sh docker-up     # Run in Docker with observability
   ./scripts/dev.sh docker-logs   # View logs

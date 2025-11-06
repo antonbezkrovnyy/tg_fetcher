@@ -156,23 +156,6 @@ class FetcherConfig(BaseSettings):
         description="Prometheus Pushgateway URL (e.g., http://pushgateway:9091)"
     )
     
-    @field_validator('telegram_chats', mode='before')
-    @classmethod
-    def parse_chats_list(cls, v: str | list[str]) -> list[str]:
-        """Parse comma-separated chat list or validate list."""
-        if isinstance(v, str):
-            # Split by comma and strip whitespace
-            chats = [chat.strip() for chat in v.split(',') if chat.strip()]
-            if not chats:
-                raise ValueError("telegram_chats cannot be empty")
-            return chats
-        elif isinstance(v, list):
-            if not v:
-                raise ValueError("telegram_chats cannot be empty")
-            return v
-        else:
-            raise ValueError("telegram_chats must be string or list")
-    
     @field_validator('fetch_date', 'fetch_start', 'fetch_end', mode='before')
     @classmethod
     def parse_date_fields(cls, v: str | date | None) -> date | None:
@@ -220,3 +203,4 @@ class FetcherConfig(BaseSettings):
         # Remove + and create safe filename
         safe_phone = phone.replace('+', '')
         return self.session_dir / f"session_{safe_phone}.session"
+

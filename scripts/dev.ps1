@@ -68,6 +68,10 @@ switch ($Command) {
         Write-Host "Running Telegram Fetcher..." -ForegroundColor Green
         python -m src
     }
+    "auth" {
+        Write-Host "Authorizing Telegram session..." -ForegroundColor Green
+        python scripts/authorize_session.py
+    }
     "docker-build" {
         Write-Host "Building Docker image..." -ForegroundColor Green
         docker build -t telegram-fetcher:latest .
@@ -121,6 +125,7 @@ Testing & Quality:
 
 Application:
   run          - Run Telegram Fetcher locally
+  auth         - Authorize Telegram session (interactive)
   setup-env    - Create .env from .env.example
 
 Docker:
@@ -140,6 +145,7 @@ Usage: .\scripts\dev.ps1 <command>
 Examples:
   .\scripts\dev.ps1 setup-env     # First time setup
   .\scripts\dev.ps1 install       # Install dependencies
+  .\scripts\dev.ps1 auth          # Authorize Telegram session
   .\scripts\dev.ps1 run           # Run locally
   .\scripts\dev.ps1 docker-up     # Run in Docker with observability
   .\scripts\dev.ps1 docker-logs   # View logs
