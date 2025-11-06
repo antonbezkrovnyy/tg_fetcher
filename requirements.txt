@@ -1,0 +1,5 @@
+# Production dependencies
+# Add your production dependencies here
+# Example:
+# requests==2.31.0
+# pydantic==2.5.0
