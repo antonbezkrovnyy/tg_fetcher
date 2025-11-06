@@ -1,9 +1,30 @@
 # Copilot Instructions
 
+---
+## 🚨 CRITICAL: READ THIS FIRST - AI AGENT MANDATORY CHECKLIST
+
+**Before responding to ANY user request, you MUST:**
+
+1. ✅ **CHECK** `docs/PRE_IMPLEMENTATION_CHECKLIST.md` if implementing features
+2. ✅ **ASK QUESTIONS FIRST** - Never write code without clarifying requirements
+3. ✅ **CREATE TZ** - Write technical specification before implementation
+4. ✅ **BATCH ALL QUESTIONS** - Ask everything at once, not sequentially
+5. ✅ **LOG COMMANDS** - Every `run_in_terminal` → `docs/console.log`
+6. ✅ **FOLLOW STANDARDS** - Type hints, docstrings, code quality rules below
+
+**NEVER:**
+- ❌ Write code immediately without questions/TZ
+- ❌ Skip creating technical specification
+- ❌ Ask questions one-by-one (batch them!)
+- ❌ Forget to update console.log
+- ❌ Violate project conventions below
+
+---
+
 ## Project Overview
 This is a Python project. Follow these guidelines when working in this codebase.
 
-## AI Agent Workflow Rules
+## 🔴 AI Agent Workflow Rules (CRITICAL - ALWAYS FOLLOW)
 
 ### Communication Language
 - **User Communication**: Always respond in the same language the user is using (Russian/English/etc.)
@@ -11,9 +32,9 @@ This is a Python project. Follow these guidelines when working in this codebase.
 - **Documentation**: Follow user's language preference - ask if unclear
 - **Commit Messages**: Use English with conventional commits format
 
-### Command Logging
+### Command Logging (MANDATORY)
 - **All Terminal Commands**: Every command executed via `run_in_terminal` tool MUST be logged to `docs/console.log`
-- **Format**: Timestamp, command, and brief description
+- **Format**: `[YYYY-MM-DD HH:MM:SS Category] command - description`
 - **Purpose**: Maintain history of all executed commands for project documentation and debugging
 - **Update**: Append to the file, never overwrite (keep full history)
 
@@ -25,7 +46,7 @@ This is a Python project. Follow these guidelines when working in this codebase.
 - **Use targeted searches**: Use `grep_search` with specific patterns instead of reading multiple files
 - **Minimize tool calls**: Plan before executing - one well-thought action beats multiple trial-and-error attempts
 
-### Communication Principles
+### 🔴 Communication Principles (NEVER VIOLATE)
 1. **Never write code immediately** - Always ask and clarify requirements first
 2. **Never create documentation immediately** - Discuss structure and content before writing
 3. **Always plan before executing** - Break down tasks, discuss approach, get approval
@@ -622,3 +643,121 @@ Add to `.github/copilot-instructions.md` when:
 - Project-specific conventions emerge
 - Integration approaches are decided
 - Performance or security requirements are defined
+
+---
+## 🎯 AI AGENT QUICK REFERENCE (Always Visible)
+
+### Before EVERY Response - Ask Yourself:
+```
+□ Did I check PRE_IMPLEMENTATION_CHECKLIST.md?
+□ Did I ask ALL questions at once (not one-by-one)?
+□ Did I create/update TZ before coding?
+□ Will I log commands to console.log?
+□ Am I following type hints + docstrings standards?
+□ Am I using the user's language for communication?
+```
+
+### Critical Workflows by Task Type:
+
+#### 🆕 New Feature Request:
+```
+1. ASK clarifying questions (batch them!)
+2. CREATE docs/tech_task/TZ-<name>.md
+3. WAIT for user confirmation
+4. CHECK docs/PRE_IMPLEMENTATION_CHECKLIST.md
+5. IMPLEMENT incrementally (small pieces)
+6. UPDATE TZ with decisions
+7. LOG all commands to console.log
+```
+
+#### 🐛 Bug Fix:
+```
+1. ASK for reproduction steps / logs
+2. ANALYZE code (don't make assumptions)
+3. EXPLAIN root cause to user
+4. PROPOSE solution, wait for approval
+5. IMPLEMENT fix
+6. LOG commands
+```
+
+#### 📝 Documentation:
+```
+1. ASK what user wants documented
+2. DISCUSS structure first
+3. WAIT for approval
+4. WRITE incrementally
+5. Use user's language preference
+```
+
+#### 🔧 Refactoring:
+```
+1. ASK why refactoring is needed
+2. EXPLAIN proposed changes
+3. WAIT for confirmation
+4. REFACTOR with tests
+5. Maintain backward compatibility if needed
+```
+
+### Red Flags - STOP if you see these:
+- 🚩 **No TZ exists** for new feature → Create one first!
+- 🚩 **Asking questions sequentially** → Batch them!
+- 🚩 **Writing code without confirmation** → Stop, ask first!
+- 🚩 **No type hints/docstrings** → Add them!
+- 🚩 **Forgot console.log** → Always update!
+- 🚩 **Not using user's language** → Match their language!
+
+### Quality Gates (Every Code Change):
+```python
+# Every function MUST have:
+def example_function(param: str) -> dict[str, Any]:  # ✅ Type hints
+    """Short description.                            # ✅ Docstring
+    
+    Args:
+        param: Description
+        
+    Returns:
+        Description
+        
+    Raises:
+        ValueError: When...
+    """
+    if not param:                                    # ✅ Input validation
+        raise ValueError("param required")
+    
+    logger.info("Processing", extra={"param": param})  # ✅ Logging
+    return {"result": param}
+```
+
+### Command Logging Template:
+```
+[2025-11-06 HH:MM:SS Category] command - brief description
+
+Categories: Testing, Environment, Dependencies, Docker, Git, QA, Code, Documentation, Config
+```
+
+### Communication Template:
+```markdown
+## Уточняющие вопросы: (if needed, batch ALL)
+1. Question 1?
+2. Question 2?
+3. Question 3?
+
+## Предлагаемый план: (always before coding)
+1. Step 1
+2. Step 2
+3. Step 3
+
+**Мне продолжить?** (wait for confirmation)
+```
+
+### Key Reminders:
+- 🗣️ **Language**: Match user (Russian → Russian, English → English)
+- 📋 **TZ First**: Never code without specification
+- 🎯 **Batch Questions**: Ask everything at once
+- 📝 **Log Commands**: Every terminal command → console.log
+- ✅ **Quality**: Type hints + docstrings = mandatory
+- 🔄 **Incremental**: Small steps, frequent confirmations
+- 🚫 **No Assumptions**: When in doubt, ask!
+
+---
+**Remember**: Following these rules prevents rework and ensures high-quality, maintainable code! 🎯
