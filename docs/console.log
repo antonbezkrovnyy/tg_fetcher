@@ -31,3 +31,5 @@
 [2025-11-06 Documentation] git commit -m "docs: sync console.log" - Синхронизация console.log с последними командами
 [2025-11-06 Documentation] git add docs/tech_task/TZ-telegram-fetcher.md; git commit -m "docs: update TZ with comments/reactions/progress/credentials" - Добавление и коммит обновлённого TZ (comments/reactions/progress/credentials)
 [2025-11-06 Documentation] git add docs/console.log; git commit -m "docs: add TZ commit entry to console.log" - Коммит обновлённого console.log (добавлена запись о коммите TZ)
+[2025-11-06 Documentation] git add docs/console.log; git commit -m "docs: log run_in_terminal command (console.log commit)" - Коммит обновлённой console.log (добавлена запись о предыдущем коммите)
+[2025-11-06 Documentation] git add docs/tech_task/TZ-telegram-fetcher.md; git commit -m "docs: finalize TZ review - add progress.json structure, credentials manager, risks" - Финализация ТЗ: добавлена структура progress.json, CredentialsManager, новые риски и улучшенные acceptance criteria
