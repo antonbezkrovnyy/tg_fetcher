@@ -2,56 +2,16 @@
 # This file contains all terminal commands executed during project development
 # Format: [YYYY-MM-DD HH:MM:SS] command - description
 
-## 2025-11-06 - Testing and Debugging
-
 [2025-11-06 21:40:12 Testing] & "C:/Users/Мой компьютер/Desktop/python-tg/.venv/Scripts/python.exe" scripts/test_fetch_today.py - Попытка запуска локального теста (ошибка: нет pydantic)
-
 [2025-11-06 21:40:45 Environment] configure_python_environment - Настройка Python окружения (.venv Python 3.13.3)
-
 [2025-11-06 21:41:02 Dependencies] install_python_packages pydantic pydantic-settings telethon python-dotenv - Установка необходимых зависимостей в .venv
-
-[2025-11-06 21:42:03 Testing] & "C:/Users/Мой компьютер/Desktop/python-tg/.venv/Scripts/python.exe" scripts/test_fetch_today.py - Успешный запуск локального теста фетчера
-
-## Результаты локального теста (2025-11-06 21:42-21:43)
-# - Обработано 544 сообщения из @ru_python
-# - Сохранено 543 сообщения в data\ru_python\2025-11-06.json
-# - Обработано 114 сообщений из @pythonstepikchat
-# - Сохранено 113 сообщений в data\pythonstepikchat\2025-11-06.json
-# - ✅ Fetching работает корректно
-# - ✅ Логирование прогресса каждые 10 сообщений работает
-# - ✅ Фильтрация по датам работает
-# - ✅ Сохранение в JSON работает
-# - ✅ Нет зависаний (limit=50 для комментариев устранил проблему)
-# - ✅ Telegram flood wait обработан корректно (17 секунд)
-
-## Docker Build and Deploy (2025-11-06 21:46-21:49)
-
-[2025-11-06 21:46:27 Docker] docker-compose down - Остановка всех контейнеров
-
+[2025-11-06 21:42:03 Testing] & "C:/Users/Мой компьютер/Desktop/python-tg/.venv/Scripts/python.exe" scripts/test_fetch_today.py - Успешный запуск локального теста (543 msg @ru_python, 113 msg @pythonstepikchat)
+[2025-11-06 21:46:27 Docker] docker-compose down - Остановка всех контейнеров перед полным rebuild
 [2025-11-06 21:46:33 Docker] docker-compose up --build -d - Полный Docker build с observability-stack (detached mode)
+[2025-11-06 21:48:42 Docker] docker logs telegram-fetcher - Проверка логов fetcher контейнера (успешно извлечены данные за 2025-11-05)
+[2025-11-06 21:50:15 Verification] Get-ChildItem -Path "data" -Recurse -File - Проверка созданных файлов (1.82 MB ru_python, 389 KB pythonstepikchat)
+[2025-11-06 21:51:20 Git] git status - Проверка статуса репозитория перед коммитом
+[2025-11-06 21:51:45 Git] git add -A - Добавление всех изменений в staging area
+[2025-11-06 21:52:30 Git] git commit -m "fix: resolve message fetching issues and add debugging tools" - Коммит исправлений (14 файлов, +626 строк, -45 строк)
+[2025-11-06 21:52:45 Git] git log --oneline -5 - Просмотр последних 5 коммитов
 
-## Результаты Docker запуска:
-# ✅ Все контейнеры запущены и здоровы (healthy):
-#    - observability-pushgateway (prom/pushgateway:v1.9.0)
-#    - observability-loki (grafana/loki:3.2.0)
-#    - observability-prometheus (prom/prometheus:v2.54.1)
-#    - observability-grafana (grafana/grafana:11.3.0)
-#    - telegram-fetcher (python-tg-telegram-fetcher:latest)
-# 
-# ✅ Fetcher успешно извлёк данные за ВЧЕРА (2025-11-05):
-#    - ru_python/2025-11-05.json - 1.82 MB (создан 21:48:42)
-#    - pythonstepikchat/2025-11-05.json - 389 KB (создан 21:48:56)
-# 
-# ✅ JSON логирование в Loki работает
-# ✅ Telegram API интеграция работает
-# ✅ Автоматический restart работает
-# ✅ Volume mapping работает (data/, sessions/)
-# ✅ Grafana доступна на http://localhost:3000
-
-## Ключевые исправления
-# 1. Исправлена логика iter_messages: offset_date=end_datetime, reverse=False
-# 2. Добавлен limit=50 для извлечения комментариев (устранило зависание)
-# 3. Добавлено логирование прогресса каждые 10 сообщений
-# 4. Добавлен timedelta импорт для правильного расчёта дат
-# 5. Исправлен test_fetch_today.py - FetcherService принимает только config
-# 6. Возвращён yesterday вместо today в YesterdayOnlyStrategy
