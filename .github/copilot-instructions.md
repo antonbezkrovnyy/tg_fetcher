@@ -760,4 +760,195 @@ Categories: Testing, Environment, Dependencies, Docker, Git, QA, Code, Documenta
 - 🚫 **No Assumptions**: When in doubt, ask!
 
 ---
+
+## 📊 Visual Workflow Diagrams
+
+### Feature Implementation Flow
+
+```mermaid
+graph TD
+    A[User Requests Feature] --> B{Understand Request?}
+    B -->|No| C[Ask Clarifying Questions<br/>BATCH ALL QUESTIONS]
+    B -->|Yes| D[Create TZ Document]
+    C --> D
+    D --> E[Present Plan to User]
+    E --> F{User Approves?}
+    F -->|No| G[Discuss & Update TZ]
+    G --> E
+    F -->|Yes| H[Check PRE_IMPLEMENTATION_CHECKLIST]
+    H --> I[Implement in Small Steps]
+    I --> J[Update TZ with Decisions]
+    J --> K[Log Commands to console.log]
+    K --> L{More Steps?}
+    L -->|Yes| I
+    L -->|No| M[Commit with Conventional Message]
+    M --> N[Done ✅]
+    
+    style A fill:#e1f5ff
+    style C fill:#fff3cd
+    style D fill:#d4edda
+    style H fill:#f8d7da
+    style N fill:#d1ecf1
+```
+
+### Bug Fix Flow
+
+```mermaid
+graph TD
+    A[User Reports Bug] --> B[Ask for Details]
+    B --> C{Have Enough Info?}
+    C -->|No| B
+    C -->|Yes| D[Analyze Code]
+    D --> E[Identify Root Cause]
+    E --> F[Explain to User]
+    F --> G[Propose Solution]
+    G --> H{User Approves?}
+    H -->|No| I[Discuss Alternative]
+    I --> G
+    H -->|Yes| J[Implement Fix]
+    J --> K[Test Fix]
+    K --> L{Works?}
+    L -->|No| D
+    L -->|Yes| M[Log Commands]
+    M --> N[Commit fix]
+    N --> O[Done ✅]
+    
+    style A fill:#e1f5ff
+    style B fill:#fff3cd
+    style E fill:#d4edda
+    style O fill:#d1ecf1
+```
+
+### Decision Making Process
+
+```mermaid
+graph TD
+    A[Receive Request] --> B{Type of Request?}
+    
+    B -->|Question| C[Answer Directly]
+    C --> Z[Done]
+    
+    B -->|New Feature| D[Questions + TZ + Approval]
+    D --> E[Implement]
+    
+    B -->|Bug Fix| F[Get Details + Analysis]
+    F --> G[Propose + Fix]
+    
+    B -->|Refactoring| H[Why? + Plan + Approval]
+    H --> I[Refactor]
+    
+    B -->|Documentation| J[Ask What + Structure]
+    J --> K[Write Docs]
+    
+    E --> L[Quality Check]
+    G --> L
+    I --> L
+    K --> L
+    
+    L --> M{Passes Quality Gates?}
+    M -->|No| N[Fix Issues]
+    N --> L
+    M -->|Yes| O[Log + Commit]
+    O --> Z
+    
+    style A fill:#e1f5ff
+    style L fill:#f8d7da
+    style M fill:#fff3cd
+    style O fill:#d4edda
+    style Z fill:#d1ecf1
+```
+
+---
+
+## 🎓 Real Examples from This Project
+
+### Good Example 1: Code Quality Tools Implementation
+
+**User Request:** "добавляй mypy black isort flake8 и проверяй"
+
+**AI Response:**
+```markdown
+## Уточняющие вопросы:
+
+1. **Pre-commit hooks**: Автоматическая проверка перед каждым коммитом?
+2. **CI/CD**: GitHub Actions для автоматической проверки при push/PR?
+3. **mypy строгость**: Какой уровень? (--strict, --disallow-untyped-defs?)
+4. **Конфигурация**: mypy в pyproject.toml или отдельный mypy.ini?
+5. **Exclude paths**: Исключить migrations/, tests/, .venv/?
+6. **requirements-dev.txt**: Обновить с версиями этих инструментов?
+
+## Предлагаемый план:
+
+1. Установка инструментов
+2. Конфигурация (pyproject.toml)
+3. Конфигурация (.flake8)
+4. Проверка текущего кода
+5. Исправление проблем
+6. Опционально: Pre-commit hooks
+7. Опционально: GitHub Actions
+
+**Мне продолжить?**
+```
+
+**Result:** ✅ Perfect implementation, all questions answered upfront, clear plan
+
+### Good Example 2: Bug Fix with Analysis
+
+**User Report:** "это не правда, я проверял, сообщения в чатах есть"
+
+**What AI Should Have Done (but didn't initially):**
+```markdown
+## Уточняющие вопросы:
+
+1. **Какие именно чаты?** (@ru_python, @pythonstepikchat?)
+2. **За какую дату?** (вчера, сегодня?)
+3. **Есть ли логи?** Можете показать вывод Docker/local?
+4. **Ожидаемое количество?** Примерно сколько сообщений должно быть?
+5. **Как проверяли?** (через Telegram app, другой скрипт?)
+
+## Предлагаемая диагностика:
+
+1. Проверю логи fetcher
+2. Создам test_fetch.py для валидации API
+3. Проверю iter_messages параметры
+4. Сравню с документацией Telethon
+
+**Можете предоставить эту информацию?**
+```
+
+**What Actually Happened:** ❌ AI immediately started debugging without asking
+**Lesson Learned:** ALWAYS ask for context before fixing bugs
+
+### Bad Example (to avoid): Immediate Documentation
+
+**User:** "создай README"
+**Bad AI:** *immediately creates full README.md*
+
+**Good AI Response:**
+```markdown
+## Уточняющие вопросы:
+
+1. **Целевая аудитория**: Разработчики, пользователи, или оба?
+2. **Язык**: Русский, английский, или оба?
+3. **Что включить**: 
+   - Установка и настройка?
+   - Примеры использования?
+   - API документация?
+   - Архитектура проекта?
+4. **Структура**: Стандартный README или разбить на несколько файлов?
+
+## Предлагаемая структура:
+
+- Краткое описание
+- Установка
+- Быстрый старт
+- Конфигурация
+- Примеры
+- Архитектура (ссылка на docs/)
+- Разработка (contributing)
+
+**Подходит?**
+```
+
+---
 **Remember**: Following these rules prevents rework and ensures high-quality, maintainable code! 🎯
