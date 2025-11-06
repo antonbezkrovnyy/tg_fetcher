@@ -11,6 +11,8 @@
    - Поддержка публичных каналов (channels)
    - Поддержка чатов (chats)
    - Поддержка приватных каналов/чатов (при наличии доступа)
+   - Сбор реакций к сообщениям (emoji reactions)
+   - Сбор комментариев к постам в каналах (discussion threads)
 
 2. **Режимы работы**
    - `yesterday` - сбор сообщений только за вчерашний день (по умолчанию)
@@ -70,6 +72,44 @@
 - `reply_to_msg_id` используется для связи ответов; это поле остаётся.
 - `media_type` удаляется как избыточное поле — подробности о медиа хранятся в `message_utils`/attachments при необходимости.
 
+### Progress Tracking Structure
+
+**Формат файла `progress.json`:**
+```json
+{
+  "version": "1.0",
+  "sources": {
+    "@ru_python": {
+      "last_processed_date": "2025-11-05",
+      "last_message_id": 12345,
+      "last_updated": "2025-11-06T10:30:00+00:00",
+      "status": "completed"
+    },
+    "@pythonstepikchat": {
+      "last_processed_date": "2025-11-04",
+      "last_message_id": 67890,
+      "last_updated": "2025-11-05T15:20:00+00:00",
+      "status": "in_progress"
+    }
+  }
+}
+```
+
+**Операции сброса прогресса:**
+- **Полный сброс**: удалить файл `progress.json` или установить `PROGRESS_RESET=true`
+- **Точечный сброс**: удалить конкретный ключ из `sources` (по имени источника)
+- **CLI команды** (будущее):
+  ```bash
+  # Полный сброс
+  python -m src.main --reset-progress
+  
+  # Точечный сброс для конкретного источника
+  python -m src.main --reset-progress-for @ru_python
+  
+  # Сброс за конкретную дату
+  python -m src.main --reset-date 2025-11-05 --source @ru_python
+  ```
+
 ### Non-Functional Requirements
 
 1. **Надежность**
@@ -126,7 +166,9 @@
 2. **Service Layer**
    - `FetcherService` - основной оркестратор
    - `SessionManager` - управление Telegram сессиями
+   - `CredentialsManager` - управление пулом credentials и ротация
    - `RateLimiter` - контроль частоты запросов
+   - `ProgressTracker` - отслеживание и сброс прогресса
 
 3. **Repository Pattern** (опционально)
    - `MessageRepository` - сохранение/чтение сообщений
@@ -145,6 +187,8 @@ src/
 ├── services/
 │   ├── fetcher_service.py     # Main orchestrator
 │   ├── session_manager.py     # Telegram session management
+│   ├── credentials_manager.py # Credentials pool and rotation
+│   ├── progress_tracker.py    # Progress tracking and reset
 │   └── strategy/              # Fetch strategies
 │       ├── base.py
 │       ├── continuous.py
@@ -155,7 +199,7 @@ src/
 ├── utils/
 │   ├── retry_utils.py         # Retry mechanisms
 │   ├── rate_limiter.py        # Rate limiting
-│   ├── message_utils.py       # Message processing
+│   ├── message_utils.py       # Message processing (reactions, comments)
 │   └── shutdown_utils.py      # Graceful shutdown
 ├── observability/
 │   ├── logging_config.py      # Logging setup
@@ -256,6 +300,9 @@ FETCH_MODE=full docker-compose up fetcher
 4. Добавить graceful shutdown
 5. Healthcheck endpoint
 6. Progress tracking и сохранение состояния
+7. **Реализовать сбор реакций к сообщениям**
+8. **Реализовать сбор комментариев к постам каналов**
+9. **Реализовать механизм полного и точечного сброса прогресса**
 
 ### Phase 3: Observability
 1. Интеграция с prometheus-client
@@ -263,6 +310,7 @@ FETCH_MODE=full docker-compose up fetcher
 3. Loki handler для централизованных логов
 4. Метрики: messages_fetched, fetch_duration, errors
 5. Интеграция с observability-stack
+6. **Реализовать ротацию credentials при достижении лимитов**
 
 ### Phase 4: Optimization & Production Ready
 1. Тесты (unit + integration)
@@ -284,17 +332,22 @@ FETCH_MODE=full docker-compose up fetcher
 
 ### MVP (Phase 1)
 - [ ] Сервис собирает сообщения за вчерашний день
-- [ ] Данные сохраняются в JSON формате
+- [ ] Данные сохраняются в JSON формате с версией схемы
 - [ ] Работает авторизация через Telegram
 - [ ] Session сохраняется между запусками
 - [ ] Запускается через Docker
 - [ ] Базовое логирование работает
+- [ ] Единая структура хранения `data/{source_name}/{YYYY-MM-DD}.json`
 
 ### Full Product (Phases 2-3)
 - [ ] Все режимы работы функционируют
 - [ ] Retry механизм обрабатывает ошибки
 - [ ] Rate limiting соблюдается
-- [ ] Progress tracking работает корректно
+- [ ] Progress tracking работает корректно во всех режимах
+- [ ] Механизм полного и точечного сброса прогресса реализован
+- [ ] Реакции к сообщениям собираются и сохраняются
+- [ ] Комментарии к постам каналов собираются и сохраняются
+- [ ] Поддержка множественных credentials с ротацией при лимитах
 - [ ] Метрики экспортируются в Prometheus
 - [ ] Логи отправляются в Loki
 - [ ] Healthcheck endpoint отвечает
@@ -346,6 +399,20 @@ FETCH_MODE=full docker-compose up fetcher
 - Atomic file writes
 - Save progress after each day
 - Graceful shutdown handler
+
+### Risk 5: Credential Rate Limits Exhaustion
+**Mitigation:**
+- Support multiple credentials pool
+- Automatic rotation when hitting limits
+- Flood Wait detection and credential switching
+- Configurable cooldown periods per credential
+
+### Risk 6: Comments/Reactions Data Completeness
+**Mitigation:**
+- Separate API calls for reactions and comments
+- Proper error handling for missing/unavailable data
+- Fallback to empty arrays/objects when data unavailable
+- Log warnings for incomplete data collection
 
 ## Status
 - [x] Requirements gathered
