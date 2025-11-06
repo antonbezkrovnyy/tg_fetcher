@@ -71,15 +71,29 @@ Endpoints, request/response formats
 - [ ] Tested
 ```
 
+### Pre-Implementation Checklist
+**MANDATORY**: Before ANY code implementation, MUST check `docs/PRE_IMPLEMENTATION_CHECKLIST.md`:
+- Verify Pydantic usage for data validation
+- Verify observability-stack integration
+- Verify Docker setup if needed
+- Verify all dependencies from copilot-instructions.md
+- Verify all requirements from TZ
+- Verify project structure completeness
+- Ask ALL clarifying questions in ONE batch, not sequentially
+
+**Purpose**: Prevent missing critical requirements from copilot-instructions.md or TZ
+
 ### Task Execution Process
 ```
+0. CHECK docs/PRE_IMPLEMENTATION_CHECKLIST.md - MANDATORY FIRST STEP!
 1. User Request → Create/Update Technical Specification (TZ)
 2. Clarify Requirements → Ask questions to understand business goal
 3. Study References → If user provides example projects, analyze them and save to docs/examples/
 4. Create Plan → Present task breakdown, get approval
-5. Confirm Scope → Explain what code/changes will do
-6. Execute → Implement approved plan
-7. Document → Add important decisions to copilot-instructions.md
+5. Review Checklist → Go through PRE_IMPLEMENTATION_CHECKLIST.md, ask batch questions
+6. Confirm Scope → Explain what code/changes will do
+7. Execute → Implement approved plan (incrementally, small pieces)
+8. Document → Add important decisions to copilot-instructions.md
 ```
 
 ### Examples
