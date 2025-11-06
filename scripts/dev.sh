@@ -58,7 +58,48 @@ case "$COMMAND" in
         ;;
     install)
         echo "Installing dependencies..."
+        pip install -r requirements.txt
         pip install -r requirements-dev.txt
+        ;;
+    run)
+        echo "Running Telegram Fetcher..."
+        python -m src
+        ;;
+    docker-build)
+        echo "Building Docker image..."
+        docker build -t telegram-fetcher:latest .
+        ;;
+    docker-up)
+        echo "Starting Docker services..."
+        # Create volumes first
+        docker volume create observability-stack_prometheus-data 2>/dev/null || true
+        docker volume create observability-stack_loki-data 2>/dev/null || true
+        docker volume create observability-stack_grafana-data 2>/dev/null || true
+        docker volume create observability-stack_pushgateway-data 2>/dev/null || true
+        docker-compose up -d --build
+        ;;
+    docker-down)
+        echo "Stopping Docker services..."
+        docker-compose down
+        ;;
+    docker-logs)
+        echo "Showing Docker logs..."
+        docker-compose logs -f telegram-fetcher
+        ;;
+    docker-clean)
+        echo "Cleaning Docker resources..."
+        docker-compose down -v
+        docker system prune -f
+        ;;
+    setup-env)
+        echo "Setting up environment file..."
+        if [ -f .env ]; then
+            echo ".env already exists!"
+        else
+            cp .env.example .env
+            echo ".env created from .env.example"
+            echo "Please edit .env with your Telegram credentials!"
+        fi
         ;;
     help)
         cat << EOF
@@ -66,23 +107,39 @@ case "$COMMAND" in
 Development Script Commands
 ============================
 
-test         - Run tests
-test-cov     - Run tests with coverage report
-format       - Format code with black and isort
-lint         - Run flake8 linter
-type-check   - Run mypy type checker
-audit        - Check dependencies for vulnerabilities
-check-all    - Run all checks (format, lint, type-check, test, audit)
-clean        - Clean up cache files and build artifacts
-install      - Install development dependencies
-help         - Show this help message
+Testing & Quality:
+  test         - Run tests
+  test-cov     - Run tests with coverage report
+  format       - Format code with black and isort
+  lint         - Run flake8 linter
+  type-check   - Run mypy type checker
+  audit        - Check dependencies for vulnerabilities
+  check-all    - Run all checks (format, lint, type-check, test, audit)
+
+Application:
+  run          - Run Telegram Fetcher locally
+  setup-env    - Create .env from .env.example
+
+Docker:
+  docker-build - Build Docker image
+  docker-up    - Start all services with docker-compose (creates volumes)
+  docker-down  - Stop all Docker services
+  docker-logs  - Show fetcher service logs
+  docker-clean - Stop services and clean up volumes/images
+
+Maintenance:
+  clean        - Clean up cache files and build artifacts
+  install      - Install all dependencies (production + dev)
+  help         - Show this help message
 
 Usage: ./scripts/dev.sh <command>
 
 Examples:
-  ./scripts/dev.sh test
-  ./scripts/dev.sh format
-  ./scripts/dev.sh check-all
+  ./scripts/dev.sh setup-env     # First time setup
+  ./scripts/dev.sh install       # Install dependencies
+  ./scripts/dev.sh run           # Run locally
+  ./scripts/dev.sh docker-up     # Run in Docker with observability
+  ./scripts/dev.sh docker-logs   # View logs
 
 EOF
         ;;

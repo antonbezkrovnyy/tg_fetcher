@@ -1,132 +1,274 @@
-# Python-TG
+# Telegram Messages Fetcher Service
 
-Python Telegram Bot Project
+Production-ready service for fetching messages from Telegram channels and chats with complete observability stack integration.
+
+## ✨ Features
+
+- 📥 **Message Fetching**: Collect messages from Telegram channels and chats
+- 💬 **Reactions & Comments**: Extract emoji reactions and discussion thread comments
+- 📊 **Multiple Fetch Modes**: yesterday, full, incremental, continuous, date, range
+- 🔄 **Progress Tracking**: Resume from where you left off
+- 📈 **Full Observability**: Integrated with Prometheus, Loki, and Grafana
+- 🔒 **Type-Safe**: Built with Pydantic v2 for validation
+- 🐳 **Docker-Ready**: Multi-stage build with observability stack
+- 💾 **Versioned Schema**: JSON storage with schema versioning
 
 ## 🚀 Quick Start
 
-### Prerequisites
+### Using Scripts (Recommended)
 
-- Python 3.11+
-- pip
-
-### Installation
-
-1. Clone the repository:
-```bash
-git clone <repository-url>
-cd python-tg
+**Windows:**
+```powershell
+# One-command setup and run
+.\scripts\quickstart.ps1
 ```
 
-2. Create virtual environment:
+**Linux/Mac:**
 ```bash
-python -m venv .venv
-.venv\Scripts\activate  # Windows
-# or
-source .venv/bin/activate  # Linux/Mac
+# One-command setup and run
+chmod +x scripts/*.sh
+./scripts/quickstart.sh
 ```
 
-3. Install dependencies:
+This will:
+1. Create `.env` from template
+2. Create Docker volumes
+3. Build and start all services
+4. Show access URLs
+
+### Manual Setup
+
+1. **Setup environment:**
 ```bash
-pip install -r requirements-dev.txt
+# Windows
+.\scripts\dev.ps1 setup-env
+
+# Linux/Mac
+./scripts/dev.sh setup-env
 ```
 
-4. Copy environment variables:
-```bash
-copy .env.example .env  # Windows
-# or
-cp .env.example .env  # Linux/Mac
+2. **Edit `.env` with your Telegram credentials:**
+```env
+TELEGRAM_API_ID=12345
+TELEGRAM_API_HASH=your_hash_here
+TELEGRAM_PHONE=+1234567890
+TELEGRAM_CHATS=@channel1,@channel2
 ```
 
-5. Edit `.env` file with your configuration
+3. **Run with Docker:**
+```bash
+# Windows
+.\scripts\dev.ps1 docker-up
+
+# Linux/Mac
+./scripts/dev.sh docker-up
+```
+
+## 📊 Access Services
+
+Once running:
+
+- **Grafana**: http://localhost:3000 (admin/admin)
+- **Prometheus**: http://localhost:9090
+- **Loki**: http://localhost:3100
+- **Pushgateway**: http://localhost:9091
+
+## 🛠️ Development Scripts
+
+### Windows (PowerShell)
+
+```powershell
+# Setup and run
+.\scripts\dev.ps1 setup-env     # Create .env file
+.\scripts\dev.ps1 install       # Install dependencies
+.\scripts\dev.ps1 run           # Run locally
+
+# Docker commands
+.\scripts\dev.ps1 docker-up     # Start all services
+.\scripts\dev.ps1 docker-down   # Stop services
+.\scripts\dev.ps1 docker-logs   # View logs
+.\scripts\dev.ps1 docker-clean  # Clean up
+
+# Development
+.\scripts\dev.ps1 test          # Run tests
+.\scripts\dev.ps1 format        # Format code
+.\scripts\dev.ps1 check-all     # Run all checks
+
+# Utilities
+.\scripts\quickstart.ps1        # Full setup from scratch
+.\scripts\status.ps1            # Check system status
+```
+
+### Linux/Mac (Bash)
+
+```bash
+# Setup and run
+./scripts/dev.sh setup-env      # Create .env file
+./scripts/dev.sh install        # Install dependencies
+./scripts/dev.sh run            # Run locally
+
+# Docker commands
+./scripts/dev.sh docker-up      # Start all services
+./scripts/dev.sh docker-down    # Stop services
+./scripts/dev.sh docker-logs    # View logs
+./scripts/dev.sh docker-clean   # Clean up
+
+# Development
+./scripts/dev.sh test           # Run tests
+./scripts/dev.sh format         # Format code
+./scripts/dev.sh check-all      # Run all checks
+
+# Utilities
+./scripts/quickstart.sh         # Full setup from scratch
+./scripts/status.sh             # Check system status
+```
 
 ## 📁 Project Structure
 
 ```
 python-tg/
-├── src/                # Main source code
-│   ├── api/            # API endpoints/routes
-│   ├── core/           # Core business logic
-│   ├── models/         # Data models
-│   ├── services/       # Service layer
-│   ├── repositories/   # Data access layer
-│   └── utils/          # Utility functions
-├── tests/              # Test files
-│   ├── unit/           # Unit tests
-│   └── integration/    # Integration tests
-├── docs/               # Documentation
-│   ├── tech_task/      # Technical specifications
-│   └── examples/       # Code examples
-├── docker/             # Docker configs
-├── config/             # Configuration files
-├── scripts/            # Utility scripts
-└── .github/            # GitHub configs
+├── src/
+│   ├── core/              # Configuration and core logic
+│   ├── models/            # Pydantic data models
+│   ├── services/          # Business logic services
+│   │   └── strategy/      # Fetch mode strategies
+│   ├── repositories/      # Data persistence layer
+│   └── observability/     # Logging and metrics
+├── infrastructure/
+│   └── observability-stack/  # Git submodule
+├── scripts/               # Development and deployment scripts
+├── docs/                  # Documentation
+│   ├── tech_task/         # Technical specifications
+│   └── examples/          # Reference implementations
+├── data/                  # Fetched messages (JSON)
+├── sessions/              # Telegram session files
+└── docker-compose.yml     # Full stack deployment
 ```
 
-## 🧪 Development
+## 📝 Configuration
 
-### Using Development Scripts
+All configuration via environment variables (`.env` file):
 
-We provide helper scripts for common development tasks:
+### Required
+- `TELEGRAM_API_ID` - From https://my.telegram.org/apps
+- `TELEGRAM_API_HASH` - From https://my.telegram.org/apps
+- `TELEGRAM_PHONE` - International format (+1234567890)
+- `TELEGRAM_CHATS` - Comma-separated list (@channel1,@channel2)
 
-**Windows (PowerShell):**
-```powershell
-.\scripts\dev.ps1 <command>
+### Optional
+- `FETCH_MODE` - yesterday (default), full, incremental, continuous, date, range
+- `DATA_DIR` - Data storage directory (default: ./data)
+- `LOG_LEVEL` - DEBUG, INFO, WARNING, ERROR, CRITICAL
+- `LOG_FORMAT` - json (default) or text
+- `LOKI_URL` - Loki endpoint (auto-configured in Docker)
+- `PUSHGATEWAY_URL` - Pushgateway endpoint (auto-configured in Docker)
+
+See `.env.example` for full list.
+
+## 📦 Data Format
+
+Messages are stored as JSON with versioned schema:
+
+```json
+{
+  "version": "1.0",
+  "source_info": {
+    "id": "@channel",
+    "title": "Channel Name",
+    "url": "https://t.me/channel",
+    "type": "channel"
+  },
+  "senders": {
+    "123456": "User Name"
+  },
+  "messages": [
+    {
+      "id": 12345,
+      "date": "2025-11-06T10:30:00+00:00",
+      "text": "Message text",
+      "sender_id": 123456,
+      "reactions": [
+        {"emoji": "👍", "count": 12}
+      ],
+      "comments": []
+    }
+  ]
+}
 ```
 
-**Linux/Mac:**
+## 🧪 Testing
+
 ```bash
-chmod +x scripts/dev.sh
-./scripts/dev.sh <command>
-```
+# Run tests
+./scripts/dev.sh test
 
-**Available commands:**
-- `test` - Run tests
-- `test-cov` - Run tests with coverage report
-- `format` - Format code with black and isort
-- `lint` - Run flake8 linter
-- `type-check` - Run mypy type checker
-- `audit` - Check dependencies for vulnerabilities
-- `check-all` - Run all checks (format, lint, type-check, test, audit)
-- `clean` - Clean up cache files and build artifacts
-- `install` - Install development dependencies
-- `help` - Show help message
-
-### Manual Commands
-
-If you prefer to run commands manually:
-
-**Run Tests:**
-```bash
-pytest
 # With coverage
-pytest --cov=src --cov-report=html
+./scripts/dev.sh test-cov
+
+# Check everything
+./scripts/dev.sh check-all
 ```
 
-**Format Code:**
+## 📖 Documentation
+
+- [Docker Deployment Guide](docs/DOCKER_DEPLOYMENT.md)
+- [Technical Specification](docs/tech_task/TZ-telegram-fetcher.md)
+- [Pre-Implementation Checklist](docs/PRE_IMPLEMENTATION_CHECKLIST.md)
+- [Copilot Instructions](.github/copilot-instructions.md)
+
+## 🔍 Monitoring
+
+### View Logs in Grafana
+
+1. Open Grafana: http://localhost:3000
+2. Go to Explore
+3. Select Loki data source
+4. Query: `{service="telegram-fetcher"}`
+
+### View Metrics in Prometheus
+
+1. Open Prometheus: http://localhost:9090
+2. Go to Graph
+3. Query metrics (e.g., `telegram_messages_fetched_total`)
+
+## 🐛 Troubleshooting
+
+### Check System Status
 ```bash
-black .
-isort .
+# Windows
+.\scripts\status.ps1
+
+# Linux/Mac
+./scripts/status.sh
 ```
 
-**Type Checking:**
+### View Logs
 ```bash
-mypy src/
+docker-compose logs -f telegram-fetcher
 ```
 
-**Linting:**
+### Reset Everything
 ```bash
-flake8 src/
+# Windows
+.\scripts\dev.ps1 docker-clean
+
+# Linux/Mac
+./scripts/dev.sh docker-clean
 ```
 
-**Security Audit:**
-```bash
-# On Windows, set UTF-8 first
-$env:PYTHONUTF8=1; pip-audit
+## 🏗️ Architecture
 
-# On Linux/Mac
-pip-audit
-```
+- **Pydantic v2**: Type-safe configuration and data models
+- **Repository Pattern**: Clean data access layer
+- **Strategy Pattern**: Pluggable fetch modes
+- **Service Layer**: Business logic isolation
+- **Observability**: Structured logging with Loki, metrics with Prometheus
+- **Docker**: Multi-stage build, minimal production image
 
-## 📝 License
+## 📄 License
 
-MIT License
+[Add your license here]
+
+## 🤝 Contributing
+
+[Add contribution guidelines here]
