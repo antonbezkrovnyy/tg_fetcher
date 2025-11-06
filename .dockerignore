@@ -1,0 +1,64 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+ENV/
+env/
+
+# Git
+.git/
+.gitignore
+.gitmodules
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Data and sessions (will be mounted as volumes)
+data/
+sessions/
+logs/
+*.session
+*.session-journal
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+tests/
+*.test
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# CI/CD
+.github/
+
+# Development
+requirements-dev.txt
+scripts/dev.ps1
+scripts/dev.sh
+
+# Infrastructure
+infrastructure/
+docker-compose.yml
+
+# Progress file (persisted separately)
+progress.json
+
+# Environment files (sensitive)
+.env
+.env.*
+!.env.example
+
+# Temporary files
+*.tmp
+*.log

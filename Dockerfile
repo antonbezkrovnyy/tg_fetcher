@@ -1,43 +1,74 @@
-# Multi-stage build for Python application
-FROM python:3.11-slim as base
+# Multi-stage Dockerfile for Telegram Fetcher Service
+# Stage 1: Builder - install dependencies
+# Stage 2: Runtime - minimal production image
 
-# Set environment variables
-ENV PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1 \
-    PIP_NO_CACHE_DIR=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1
+# === Stage 1: Builder ===
+FROM python:3.11-slim AS builder
 
+LABEL stage=builder
+LABEL description="Build stage for installing Python dependencies"
+
+# Set working directory
 WORKDIR /app
 
-# Install system dependencies
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
+# Install build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
+    g++ \
     && rm -rf /var/lib/apt/lists/*
 
-# Development stage
-FROM base as development
-
-COPY requirements-dev.txt .
-RUN pip install -r requirements-dev.txt
-
-COPY . .
-
-CMD ["python", "-m", "src"]
-
-# Production stage
-FROM base as production
-
+# Copy requirements
 COPY requirements.txt .
-RUN pip install -r requirements.txt
 
-COPY src/ ./src/
-COPY config/ ./config/
+# Install Python dependencies to /app/.venv
+RUN python -m venv /app/.venv && \
+    /app/.venv/bin/pip install --no-cache-dir --upgrade pip && \
+    /app/.venv/bin/pip install --no-cache-dir -r requirements.txt
+
+# === Stage 2: Runtime ===
+FROM python:3.11-slim
+
+LABEL maintainer="telegram-fetcher"
+LABEL description="Production image for Telegram Fetcher Service"
 
 # Create non-root user
-RUN useradd -m -u 1000 appuser && \
-    chown -R appuser:appuser /app
+RUN groupadd -r fetcher && useradd -r -g fetcher fetcher
 
-USER appuser
+# Set working directory
+WORKDIR /app
 
+# Install runtime dependencies only (if needed)
+# Currently none required, but keep for future
+
+# Copy virtual environment from builder
+COPY --from=builder /app/.venv /app/.venv
+
+# Copy application code
+COPY src/ /app/src/
+COPY README.md /app/
+
+# Create directories for data with proper permissions
+RUN mkdir -p /app/data /app/sessions /app/logs && \
+    chown -R fetcher:fetcher /app
+
+# Switch to non-root user
+USER fetcher
+
+# Set environment variables
+ENV PATH="/app/.venv/bin:$PATH" \
+    PYTHONPATH="/app" \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
+
+# Health check (optional - for continuous mode)
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD python -c "import sys; sys.exit(0)"
+
+# Default command
 CMD ["python", "-m", "src"]
+
+# Volume mounts for data persistence
+VOLUME ["/app/data", "/app/sessions"]
+
+# Expose metrics port (if enabled)
+EXPOSE 9090

@@ -1,33 +1,85 @@
 version: '3.8'
 
+# Telegram Fetcher Service integrated with observability-stack
+# This docker-compose extends the observability-stack services
+
 services:
-  app:
+  # === Telegram Fetcher Service ===
+  telegram-fetcher:
     build:
       context: .
-      target: development
-    container_name: python-tg-app
-    volumes:
-      - .:/app
+      dockerfile: Dockerfile
+    container_name: telegram-fetcher
     env_file:
       - .env
-    ports:
-      - "8000:8000"
-    command: python -m src
+    environment:
+      # Override with docker-compose URLs
+      - LOKI_URL=http://loki:3100
+      - PUSHGATEWAY_URL=http://pushgateway:9091
+      - LOG_FORMAT=json
+      - ENABLE_METRICS=true
+    volumes:
+      - ./data:/app/data
+      - ./sessions:/app/sessions
+      - ./progress.json:/app/progress.json
+    networks:
+      - monitoring
+    depends_on:
+      loki:
+        condition: service_healthy
+      pushgateway:
+        condition: service_healthy
     restart: unless-stopped
+    # For one-time runs (yesterday mode), comment out restart
 
-  # Example: Add database service if needed
-  # db:
-  #   image: postgres:15-alpine
-  #   container_name: python-tg-db
-  #   environment:
-  #     POSTGRES_USER: user
-  #     POSTGRES_PASSWORD: password
-  #     POSTGRES_DB: dbname
-  #   volumes:
-  #     - postgres_data:/var/lib/postgresql/data
-  #   ports:
-  #     - "5432:5432"
-  #   restart: unless-stopped
+  # === Observability Stack Services ===
+  # Included from infrastructure/observability-stack
+  
+  pushgateway:
+    extends:
+      file: ./infrastructure/observability-stack/docker-compose.yml
+      service: pushgateway
+    networks:
+      - monitoring
 
-# volumes:
-#   postgres_data:
+  prometheus:
+    extends:
+      file: ./infrastructure/observability-stack/docker-compose.yml
+      service: prometheus
+    networks:
+      - monitoring
+
+  loki:
+    extends:
+      file: ./infrastructure/observability-stack/docker-compose.yml
+      service: loki
+    networks:
+      - monitoring
+
+  grafana:
+    extends:
+      file: ./infrastructure/observability-stack/docker-compose.yml
+      service: grafana
+    networks:
+      - monitoring
+
+# Shared network for all services
+networks:
+  monitoring:
+    driver: bridge
+    name: telegram-fetcher-monitoring
+
+# Named volumes (using observability-stack volumes)
+volumes:
+  prometheus-data:
+    external: true
+    name: observability-stack_prometheus-data
+  loki-data:
+    external: true
+    name: observability-stack_loki-data
+  grafana-data:
+    external: true
+    name: observability-stack_grafana-data
+  pushgateway-data:
+    external: true
+    name: observability-stack_pushgateway-data
