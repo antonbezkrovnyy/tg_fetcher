@@ -83,19 +83,19 @@ Every code change MUST have:
 ```python
 def function_name(param: str) -> dict[str, Any]:  # ✅ Type hints
     """Short description.                         # ✅ Docstring
-    
+
     Args:
         param: What it is
-    
+
     Returns:
         What it returns
-    
+
     Raises:
         ValueError: When...
     """
     if not param:                                  # ✅ Validation
         raise ValueError("param is required")
-    
+
     logger.info("Action", extra={"param": param})  # ✅ Logging
     return {"result": param}
 ```

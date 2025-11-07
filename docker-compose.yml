@@ -19,9 +19,8 @@ services:
       - LOG_FORMAT=json
       - ENABLE_METRICS=true
     volumes:
-      - ./data:/app/data
+      - ./data:/app/data  # Includes progress.json inside data/
       - ./sessions:/app/sessions
-      - ./progress.json:/app/progress.json
     networks:
       - monitoring
     depends_on:
@@ -29,8 +28,8 @@ services:
         condition: service_healthy
       pushgateway:
         condition: service_healthy
-    restart: unless-stopped
-    # For one-time runs (yesterday mode), comment out restart
+    restart: "no"  # One-shot mode: collect data and stop
+    # For continuous mode, use: restart: unless-stopped
 
   # === Observability Stack Services ===
   # Included from infrastructure/observability-stack

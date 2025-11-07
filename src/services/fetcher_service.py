@@ -16,6 +16,7 @@ from telethon.tl.types import Channel, Chat, MessageReactions, User
 from src.core.config import FetcherConfig
 from src.models.schemas import ForwardInfo, Message, Reaction, SourceInfo
 from src.repositories.message_repository import MessageRepository
+from src.services.progress_tracker import ProgressTracker
 from src.services.session_manager import SessionManager
 from src.services.strategy.base import BaseFetchStrategy
 from src.services.strategy.yesterday import YesterdayOnlyStrategy
@@ -43,6 +44,12 @@ class FetcherService:
             session_dir=config.session_dir,
         )
         self.repository = MessageRepository(config.data_dir)
+        self.progress_tracker = ProgressTracker(config.progress_file)
+
+        # Handle progress reset if requested
+        if config.progress_reset:
+            logger.warning("PROGRESS_RESET=true, resetting all progress")
+            self.progress_tracker.reset_all()
 
         # Select strategy based on fetch mode
         self.strategy = self._create_strategy()
@@ -52,6 +59,7 @@ class FetcherService:
             extra={
                 "strategy": self.strategy.get_strategy_name(),
                 "sources": self.config.telegram_chats,
+                "force_refetch": self.config.force_refetch,
             },
         )
 
@@ -123,6 +131,23 @@ class FetcherService:
             start_date: Start date (inclusive)
             end_date: End date (inclusive)
         """
+        # Check if already completed (unless force_refetch is enabled)
+        if not self.config.force_refetch and self.progress_tracker.is_date_completed(
+            source_info.id, start_date
+        ):
+            logger.info(
+                f"Skipping {source_info.id} for {start_date} - already completed",
+                extra={
+                    "source": source_info.id,
+                    "date": start_date.isoformat(),
+                    "reason": "already_completed",
+                },
+            )
+            return
+
+        # Mark as in progress
+        self.progress_tracker.mark_in_progress(source_info.id, start_date)
+
         logger.info(
             f"Fetching messages for {source_info.id}",
             extra={
@@ -209,27 +234,60 @@ class FetcherService:
 
             messages_fetched += 1
 
-        # Save collection
-        if messages_fetched > 0:
+        # Save collection and update progress
+        self._save_and_mark_complete(
+            source_info, start_date, collection, messages_fetched
+        )
+
+    def _save_and_mark_complete(
+        self,
+        source_info: SourceInfo,
+        target_date: date,
+        collection: Any,
+        message_count: int,
+    ) -> None:
+        """Save collection and mark date as completed.
+
+        Args:
+            source_info: Source metadata
+            target_date: Date that was processed
+            collection: Message collection
+            message_count: Number of messages fetched
+        """
+        last_message_id = None
+
+        if message_count > 0:
             self.repository.save_collection(
                 source_name=source_info.id,
-                target_date=start_date,
+                target_date=target_date,
                 collection=collection,
             )
 
+            # Get last message ID for progress tracking
+            if collection.messages:
+                last_message_id = collection.messages[-1].id
+
             logger.info(
-                f"Saved {messages_fetched} messages",
+                f"Saved {message_count} messages",
                 extra={
                     "source": source_info.id,
-                    "date": start_date.isoformat(),
-                    "count": messages_fetched,
+                    "date": target_date.isoformat(),
+                    "count": message_count,
                 },
             )
         else:
             logger.info(
-                f"No messages found for {source_info.id} on {start_date}",
-                extra={"source": source_info.id, "date": start_date.isoformat()},
+                f"No messages found for {source_info.id} on {target_date}",
+                extra={"source": source_info.id, "date": target_date.isoformat()},
             )
+
+        # Mark as completed in progress tracker
+        self.progress_tracker.mark_completed(
+            source=source_info.id,
+            target_date=target_date,
+            message_count=message_count,
+            last_message_id=last_message_id,
+        )
 
     async def _extract_message_data(
         self, client: TelegramClient, entity: Entity, message: TelethonMessage

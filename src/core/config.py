@@ -70,7 +70,8 @@ class FetcherConfig(BaseSettings):
         default=Path("./sessions"), description="Directory for Telegram session files"
     )
     progress_file: Path = Field(
-        default=Path("progress.json"), description="File for tracking fetch progress"
+        default=Path("data/progress.json"),
+        description="File for tracking fetch progress",
     )
 
     # === Optional: Multiple Credentials (Future) ===
@@ -104,6 +105,12 @@ class FetcherConfig(BaseSettings):
     # === Progress Reset ===
     progress_reset: bool = Field(
         default=False, description="Reset all progress and start from scratch"
+    )
+
+    # === Force Refetch ===
+    force_refetch: bool = Field(
+        default=False,
+        description="Force re-fetching even if data already exists (ignores progress)",
     )
 
     # === Logging ===

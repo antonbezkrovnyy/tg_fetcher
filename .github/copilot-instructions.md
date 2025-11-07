@@ -711,19 +711,19 @@ Add to `.github/copilot-instructions.md` when:
 # Every function MUST have:
 def example_function(param: str) -> dict[str, Any]:  # ✅ Type hints
     """Short description.                            # ✅ Docstring
-    
+
     Args:
         param: Description
-        
+
     Returns:
         Description
-        
+
     Raises:
         ValueError: When...
     """
     if not param:                                    # ✅ Input validation
         raise ValueError("param required")
-    
+
     logger.info("Processing", extra={"param": param})  # ✅ Logging
     return {"result": param}
 ```
@@ -783,7 +783,7 @@ graph TD
     L -->|Yes| I
     L -->|No| M[Commit with Conventional Message]
     M --> N[Done ✅]
-    
+
     style A fill:#e1f5ff
     style C fill:#fff3cd
     style D fill:#d4edda
@@ -812,7 +812,7 @@ graph TD
     L -->|Yes| M[Log Commands]
     M --> N[Commit fix]
     N --> O[Done ✅]
-    
+
     style A fill:#e1f5ff
     style B fill:#fff3cd
     style E fill:#d4edda
@@ -824,33 +824,33 @@ graph TD
 ```mermaid
 graph TD
     A[Receive Request] --> B{Type of Request?}
-    
+
     B -->|Question| C[Answer Directly]
     C --> Z[Done]
-    
+
     B -->|New Feature| D[Questions + TZ + Approval]
     D --> E[Implement]
-    
+
     B -->|Bug Fix| F[Get Details + Analysis]
     F --> G[Propose + Fix]
-    
+
     B -->|Refactoring| H[Why? + Plan + Approval]
     H --> I[Refactor]
-    
+
     B -->|Documentation| J[Ask What + Structure]
     J --> K[Write Docs]
-    
+
     E --> L[Quality Check]
     G --> L
     I --> L
     K --> L
-    
+
     L --> M{Passes Quality Gates?}
     M -->|No| N[Fix Issues]
     N --> L
     M -->|Yes| O[Log + Commit]
     O --> Z
-    
+
     style A fill:#e1f5ff
     style L fill:#f8d7da
     style M fill:#fff3cd
@@ -930,7 +930,7 @@ graph TD
 
 1. **Целевая аудитория**: Разработчики, пользователи, или оба?
 2. **Язык**: Русский, английский, или оба?
-3. **Что включить**: 
+3. **Что включить**:
    - Установка и настройка?
    - Примеры использования?
    - API документация?
