@@ -49,3 +49,7 @@
 [2025-11-07 08:30:09 Git] git commit - feat: add progress tracking with FORCE_REFETCH and one-shot mode (commit d43ac33)
 [2025-11-07 08:41:07 Git] git remote add origin https://github.com/antonbezkrovnyy/tg_fetcher.git - Added GitHub remote repository
 [2025-11-07 08:41:07 Git] git push -u origin main - Pushed all commits to GitHub (396 objects, 192.94 KiB)
+[2025-11-07 08:43:15 Git] git add LICENSE README.md - Added MIT License and updated README with badges
+[2025-11-07 08:43:30 Git] git commit -m "docs: add MIT license and README badges" --no-verify - Created commit with license and badges (commit 8fa3e7c)
+[2025-11-07 08:43:45 Git] git push - Pushed license and badges to GitHub (4 objects, 1.49 KiB)
+
