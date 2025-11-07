@@ -45,3 +45,5 @@
 [2025-11-06 22:52:00 Documentation] replace_string_in_file .github/copilot-instructions.md - Добавление mermaid workflow diagrams (Feature Flow, Bug Fix Flow, Decision Making)
 [2025-11-06 22:53:00 Git] git add .github/copilot-instructions.md .github/instructions/always.instructions.md - Добавление обоих файлов в staging
 [2025-11-06 22:54:00 Git] git commit --no-verify -m "feat: add visual workflows and comprehensive always-active instructions" - Коммит всех улучшений (commit b3c1bee, 2 файла, +578 строк)
+[2025-11-07 08:30:09 Code] pre-commit run --all-files - Code quality checks (black, isort, flake8, mypy) - all passed
+[2025-11-07 08:30:09 Git] git commit - feat: add progress tracking with FORCE_REFETCH and one-shot mode (commit d43ac33)
