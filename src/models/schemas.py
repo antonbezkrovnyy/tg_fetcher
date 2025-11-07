@@ -111,7 +111,7 @@ class SourceInfo(BaseModel):
         id: Channel/chat username or ID
         title: Channel/chat title
         url: Direct link to channel/chat
-        type: Source type (channel, chat, group)
+        type: Source type (channel, supergroup, chat, group, unknown)
     """
 
     model_config = ConfigDict(frozen=True)
@@ -121,8 +121,8 @@ class SourceInfo(BaseModel):
     url: str = Field(..., description="Direct URL to source")
     type: str = Field(
         default="unknown",
-        pattern=r"^(channel|chat|group|unknown)$",
-        description="Source type",
+        pattern=r"^(channel|supergroup|chat|group|unknown)$",
+        description="Source type: channel (broadcast), supergroup (large chat), chat, group, unknown",
     )
 
 

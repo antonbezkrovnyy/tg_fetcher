@@ -224,7 +224,9 @@ class FetcherService:
                 break
 
             # Extract message data with reactions and comments
-            message_data = await self._extract_message_data(client, entity, message)
+            message_data = await self._extract_message_data(
+                client, entity, message, source_info
+            )
             collection.messages.append(message_data)
 
             # Add sender to senders map
@@ -290,7 +292,11 @@ class FetcherService:
         )
 
     async def _extract_message_data(
-        self, client: TelegramClient, entity: Entity, message: TelethonMessage
+        self,
+        client: TelegramClient,
+        entity: Entity,
+        message: TelethonMessage,
+        source_info: SourceInfo,
     ) -> Message:
         """Extract message data into Pydantic model with reactions and comments.
 
@@ -298,6 +304,7 @@ class FetcherService:
             client: Telegram client
             entity: Source entity
             message: Telethon message object
+            source_info: Source metadata (to check if channel)
 
         Returns:
             Message model instance
@@ -305,8 +312,8 @@ class FetcherService:
         # Extract reactions
         reactions = await self._extract_reactions(message)
 
-        # Extract comments (for channels with discussion groups)
-        comments = await self._extract_comments(client, entity, message)
+        # Extract comments (only for channels, not for chats/supergroups)
+        comments = await self._extract_comments(client, entity, message, source_info)
 
         # Extract forward info
         forward_info = self._extract_forward_info(message)
@@ -364,19 +371,32 @@ class FetcherService:
         return reactions_list
 
     async def _extract_comments(
-        self, client: TelegramClient, entity: Entity, message: TelethonMessage
+        self,
+        client: TelegramClient,
+        entity: Entity,
+        message: TelethonMessage,
+        source_info: SourceInfo,
     ) -> list[Message]:
         """Extract comments from channel post discussion.
 
+        Comments are only available for channels (type="channel"), not for chats/supergroups.
+        In chats, replies are tracked via reply_to_msg_id field instead.
+
         Args:
             client: Telegram client
-            entity: Channel entity
-            message: Channel message
+            entity: Telegram entity
+            message: Original message
+            source_info: Source metadata (to check if channel)
 
         Returns:
-            List of Message models representing comments
+            List of comment messages (empty for chats)
         """
         comments_list: list[Message] = []
+
+        # Skip comments extraction for chats and supergroups
+        # Comments are only for channels (type="channel")
+        if source_info.type != "channel":
+            return comments_list
 
         # Check if message has replies (discussion thread)
         if not hasattr(message, "replies") or message.replies is None:
@@ -478,7 +498,11 @@ class FetcherService:
 
         if isinstance(entity, Channel):
             title = entity.title
-            source_type = "channel"
+            # Supergroups are Channels with megagroup=True (they're chats, not broadcast channels)
+            if entity.megagroup:
+                source_type = "supergroup"
+            else:
+                source_type = "channel"
             if entity.username:
                 source_id = f"@{entity.username}"
                 url = f"https://t.me/{entity.username}"
