@@ -47,3 +47,5 @@
 [2025-11-06 22:54:00 Git] git commit --no-verify -m "feat: add visual workflows and comprehensive always-active instructions" - Коммит всех улучшений (commit b3c1bee, 2 файла, +578 строк)
 [2025-11-07 08:30:09 Code] pre-commit run --all-files - Code quality checks (black, isort, flake8, mypy) - all passed
 [2025-11-07 08:30:09 Git] git commit - feat: add progress tracking with FORCE_REFETCH and one-shot mode (commit d43ac33)
+[2025-11-07 08:41:07 Git] git remote add origin https://github.com/antonbezkrovnyy/tg_fetcher.git - Added GitHub remote repository
+[2025-11-07 08:41:07 Git] git push -u origin main - Pushed all commits to GitHub (396 objects, 192.94 KiB)
