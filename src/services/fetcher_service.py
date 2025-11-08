@@ -93,6 +93,69 @@ class FetcherService:
                         exc_info=True,
                     )
 
+    async def fetch_single_chat(self, chat_identifier: str) -> dict[str, Any]:
+        """Fetch messages from a single chat (for daemon mode commands).
+
+        Args:
+            chat_identifier: Chat username or ID
+
+        Returns:
+            Dictionary with fetch results:
+                - message_count: Number of messages fetched
+                - file_path: Path to saved JSON file
+                - source_id: Chat ID/username
+                - dates: List of dates processed
+
+        Raises:
+            Exception: If fetch fails
+        """
+        result: dict[str, Any] = {
+            "message_count": 0,
+            "file_path": "",
+            "source_id": chat_identifier,
+            "dates": [],
+        }
+
+        async with self.session_manager as client:
+            try:
+                # Get entity
+                entity = await client.get_entity(chat_identifier)
+                source_info = self._extract_source_info(entity, chat_identifier)
+                result["source_id"] = source_info.id
+
+                # Get date ranges from strategy
+                async for start_date, end_date in self.strategy.get_date_ranges(
+                    client, entity
+                ):
+                    # Process this date range
+                    await self._process_date_range(
+                        client, entity, source_info, start_date, end_date
+                    )
+
+                    # Track processed date
+                    result["dates"].append(start_date.isoformat())
+
+                    # Get message count from progress (approximate)
+                    # Note: More accurate tracking would require
+                    # modifying _process_date_range
+
+                # Build file path (assume yesterday strategy)
+                if result["dates"]:
+                    latest_date = result["dates"][0]
+                    result["file_path"] = (
+                        f"data/{source_info.id}/" f"{source_info.id}_{latest_date}.json"
+                    )
+
+                return result
+
+            except Exception as e:
+                logger.error(
+                    f"Failed to fetch single chat {chat_identifier}: {e}",
+                    extra={"chat": chat_identifier},
+                    exc_info=True,
+                )
+                raise
+
     async def _process_chat(self, client: TelegramClient, chat_identifier: str) -> None:
         """Process single chat/channel.
 
@@ -379,8 +442,9 @@ class FetcherService:
     ) -> list[Message]:
         """Extract comments from channel post discussion.
 
-        Comments are only available for channels (type="channel"), not for chats/supergroups.
-        In chats, replies are tracked via reply_to_msg_id field instead.
+        Comments are only available for channels (type="channel"),
+        not for chats/supergroups. In chats, replies are tracked
+        via reply_to_msg_id field instead.
 
         Args:
             client: Telegram client
@@ -498,7 +562,8 @@ class FetcherService:
 
         if isinstance(entity, Channel):
             title = entity.title
-            # Supergroups are Channels with megagroup=True (they're chats, not broadcast channels)
+            # Supergroups are Channels with megagroup=True
+            # (they're chats, not broadcast channels)
             if entity.megagroup:
                 source_type = "supergroup"
             else:

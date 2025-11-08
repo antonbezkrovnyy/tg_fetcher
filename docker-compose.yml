@@ -1,84 +1,49 @@
 version: '3.8'
 
-# Telegram Fetcher Service integrated with observability-stack
-# This docker-compose extends the observability-stack services
+# Telegram Fetcher Service
+# Connects to shared TG Infrastructure Stack (tg-infra)
+# External network: tg-infrastructure
 
 services:
-  # === Telegram Fetcher Service ===
+  # === Telegram Fetcher Service (Daemon Mode) ===
   telegram-fetcher:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: telegram-fetcher
+    # Run in daemon mode (listens for Redis commands)
+    command: ["python", "-m", "src.daemon"]
     env_file:
       - .env
     environment:
-      # Override with docker-compose URLs
-      - LOKI_URL=http://loki:3100
-      - PUSHGATEWAY_URL=http://pushgateway:9091
+      # Redis connection (commands queue & events)
+      - REDIS_URL=redis://tg-redis:6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+
+      # Observability stack connection
+      - LOKI_URL=http://tg-loki:3100
+      - PUSHGATEWAY_URL=http://tg-pushgateway:9091
+      - PROMETHEUS_URL=http://tg-prometheus:9090
+
+      # Service metadata
+      - SERVICE_NAME=telegram-fetcher
+      - ENVIRONMENT=${ENVIRONMENT:-development}
+      - HOSTNAME=telegram-fetcher-1
+
+      # Logging & Metrics
       - LOG_FORMAT=json
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - ENABLE_METRICS=true
     volumes:
       - ./data:/app/data  # Includes progress.json inside data/
       - ./sessions:/app/sessions
     networks:
-      - monitoring
-    depends_on:
-      loki:
-        condition: service_healthy
-      pushgateway:
-        condition: service_healthy
-    restart: "no"  # One-shot mode: collect data and stop
-    # For continuous mode, use: restart: unless-stopped
+      - tg-infrastructure
+    restart: unless-stopped  # Daemon mode: run continuously
+    # For one-shot mode (old behavior), use: command: ["python", "-m", "src.main"]
 
-  # === Observability Stack Services ===
-  # Included from infrastructure/observability-stack
-
-  pushgateway:
-    extends:
-      file: ./infrastructure/observability-stack/docker-compose.yml
-      service: pushgateway
-    networks:
-      - monitoring
-
-  prometheus:
-    extends:
-      file: ./infrastructure/observability-stack/docker-compose.yml
-      service: prometheus
-    networks:
-      - monitoring
-
-  loki:
-    extends:
-      file: ./infrastructure/observability-stack/docker-compose.yml
-      service: loki
-    networks:
-      - monitoring
-
-  grafana:
-    extends:
-      file: ./infrastructure/observability-stack/docker-compose.yml
-      service: grafana
-    networks:
-      - monitoring
-
-# Shared network for all services
+# === Networks ===
 networks:
-  monitoring:
-    driver: bridge
-    name: telegram-fetcher-monitoring
-
-# Named volumes (using observability-stack volumes)
-volumes:
-  prometheus-data:
+  tg-infrastructure:
     external: true
-    name: observability-stack_prometheus-data
-  loki-data:
-    external: true
-    name: observability-stack_loki-data
-  grafana-data:
-    external: true
-    name: observability-stack_grafana-data
-  pushgateway-data:
-    external: true
-    name: observability-stack_pushgateway-data
+    name: tg-infrastructure

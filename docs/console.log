@@ -1,4 +1,16 @@
 # Console Commands Log
+
+## 2025-11-08: Phase 4 - Redis PubSub Automation (python-tg daemon mode)
+
+[2025-11-08 08:52:18 Docker] docker-compose build telegram-fetcher - Building daemon mode image
+[2025-11-08 08:52:58 Docker] docker-compose up -d telegram-fetcher - Starting daemon mode
+[2025-11-08 08:53:30 Testing] python scripts/send_fetch_command.py --chat pythonstepikchat --days 1 --limit 10 - Test command
+[2025-11-08 08:54:47 Docker] docker-compose build telegram-fetcher - Rebuild with fixed fetch_single_chat method
+[2025-11-08 08:55:22 Docker] docker-compose up -d telegram-fetcher - Restart daemon with fixes
+[2025-11-08 08:55:48 Testing] python scripts/send_fetch_command.py --chat pythonstepikchat --days 1 --limit 10 - Successful test
+[2025-11-08 08:56:37 Testing] python scripts/send_fetch_command.py --chat ru_python --days 1 - Fetch ru_python (271 messages)
+
+**Result**: ✅ Daemon mode working! Successfully processed commands from Redis, fetched messages, published events.
 # This file contains all terminal commands executed during project development
 # Format: [YYYY-MM-DD HH:MM:SS] command - description
 
@@ -52,4 +64,3 @@
 [2025-11-07 08:43:15 Git] git add LICENSE README.md - Added MIT License and updated README with badges
 [2025-11-07 08:43:30 Git] git commit -m "docs: add MIT license and README badges" --no-verify - Created commit with license and badges (commit 8fa3e7c)
 [2025-11-07 08:43:45 Git] git push - Pushed license and badges to GitHub (4 objects, 1.49 KiB)
-

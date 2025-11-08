@@ -140,6 +140,15 @@ class FetcherConfig(BaseSettings):
         description="Prometheus Pushgateway URL (e.g., http://pushgateway:9091)",
     )
 
+    # === Redis (for PubSub and queue) ===
+    redis_url: str = Field(
+        default="redis://localhost:6379",
+        description="Redis connection URL (redis://host:port)",
+    )
+    redis_password: Optional[str] = Field(
+        default=None, description="Redis password (if required)"
+    )
+
     @field_validator("fetch_date", "fetch_start", "fetch_end", mode="before")
     @classmethod
     def parse_date_fields(cls, v: str | date | None) -> date | None:

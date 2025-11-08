@@ -122,7 +122,10 @@ class SourceInfo(BaseModel):
     type: str = Field(
         default="unknown",
         pattern=r"^(channel|supergroup|chat|group|unknown)$",
-        description="Source type: channel (broadcast), supergroup (large chat), chat, group, unknown",
+        description=(
+            "Source type: channel (broadcast), supergroup (large chat), "
+            "chat, group, unknown"
+        ),
     )
 
 

@@ -1,13 +1,14 @@
-"""Progress tracking for Telegram message fetching.
+"""Progress tracker for managing fetch state across multiple sources.
 
-Manages progress.json file to track completed fetches and avoid re-fetching.
+This module provides tracking of which dates have been successfully fetched
+for each source, preventing duplicate work and allowing resumable fetching.
 """
 
 import json
 import logging
 from datetime import date, datetime
 from pathlib import Path
-from typing import Any, Optional
+from typing import Optional
 
 from pydantic import BaseModel, Field
 
@@ -132,7 +133,11 @@ class ProgressTracker:
             return False
 
     def mark_completed(
-        self, source: str, target_date: date, message_count: int, last_message_id: Optional[int] = None
+        self,
+        source: str,
+        target_date: date,
+        message_count: int,
+        last_message_id: Optional[int] = None,
     ) -> None:
         """Mark date as completed for source.
 
