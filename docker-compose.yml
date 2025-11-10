@@ -42,6 +42,27 @@ services:
     restart: unless-stopped  # Daemon mode: run continuously
     # For one-shot mode (old behavior), use: command: ["python", "-m", "src.main"]
 
+  # === Daily Scheduler: enqueue 'yesterday' job(s) ===
+  fetch-scheduler:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: fetch-scheduler
+    command: ["python", "-m", "src.services.fetch_scheduler"]
+    environment:
+      - REDIS_URL=redis://tg-redis:6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      # Comma-separated chats
+      - FETCH_SCHEDULE_CHATS=${FETCH_SCHEDULE_CHATS:-ru_python}
+      # Daily time in HH:MM (24h); default 02:00 UTC
+      - SCHEDULE_TIME=${SCHEDULE_TIME:-02:00}
+      - TIMEZONE=${TIMEZONE:-UTC}
+      # Optional: fire once immediately on start
+      - RUN_ON_START=${RUN_ON_START:-false}
+    networks:
+      - tg-infrastructure
+    restart: unless-stopped
+
 # === Networks ===
 networks:
   tg-infrastructure:
