@@ -11,6 +11,8 @@ from typing import Optional
 
 import redis  # type: ignore
 
+from src.utils.correlation import get_correlation_id
+
 logger = logging.getLogger(__name__)
 
 
@@ -86,8 +88,18 @@ class EventPublisher:
             "service": "tg_fetcher"
         }
         """
+        correlation_id = get_correlation_id()
+
         if not self._redis_client:
-            logger.warning("Not connected to Redis, skipping event publish")
+            logger.warning(
+                "Not connected to Redis, skipping event publish",
+                extra={
+                    "correlation_id": correlation_id,
+                    "event_type": "messages_fetched",
+                    "chat": chat,
+                    "error_type": "redis_not_connected",
+                },
+            )
             return
 
         event = {
@@ -99,6 +111,7 @@ class EventPublisher:
             "duration_seconds": round(duration_seconds, 2),
             "timestamp": datetime.utcnow().isoformat() + "Z",
             "service": "tg_fetcher",
+            "correlation_id": correlation_id,
         }
 
         try:
@@ -106,20 +119,28 @@ class EventPublisher:
             subscribers = self._redis_client.publish(self.EVENTS_CHANNEL, event_json)
 
             logger.info(
-                "Published event: messages_fetched",
+                "Event published successfully",
                 extra={
+                    "correlation_id": correlation_id,
+                    "event_type": "messages_fetched",
                     "chat": chat,
                     "date": date,
                     "message_count": message_count,
-                    "subscribers": subscribers,
+                    "subscribers_count": subscribers,
                     "channel": self.EVENTS_CHANNEL,
+                    "status": "success",
                 },
             )
 
         except Exception as e:
             logger.error(
-                f"Failed to publish event: {e}",
-                extra={"event": event, "error": str(e)},
+                "Failed to publish event",
+                extra={
+                    "correlation_id": correlation_id,
+                    "error_type": "publish_error",
+                    "error_class": type(e).__name__,
+                    "event": event,
+                },
                 exc_info=True,
             )
 
@@ -138,7 +159,17 @@ class EventPublisher:
             error: Error message
             duration_seconds: Duration before failure
         """
+        correlation_id = get_correlation_id()
+
         if not self._redis_client:
+            logger.warning(
+                "Not connected to Redis, skipping error event publish",
+                extra={
+                    "correlation_id": correlation_id,
+                    "event_type": "fetch_failed",
+                    "chat": chat,
+                },
+            )
             return
 
         event = {
@@ -149,23 +180,36 @@ class EventPublisher:
             "duration_seconds": round(duration_seconds, 2),
             "timestamp": datetime.utcnow().isoformat() + "Z",
             "service": "tg_fetcher",
+            "correlation_id": correlation_id,
         }
 
         try:
             event_json = json.dumps(event)
-            self._redis_client.publish(self.EVENTS_CHANNEL, event_json)
+            subscribers = self._redis_client.publish(self.EVENTS_CHANNEL, event_json)
 
-            logger.warning(
-                "Published event: fetch_failed",
+            logger.info(
+                "Failure event published successfully",
                 extra={
+                    "correlation_id": correlation_id,
+                    "event_type": "fetch_failed",
                     "chat": chat,
                     "date": date,
-                    "error": error,
+                    "subscribers_count": subscribers,
+                    "channel": self.EVENTS_CHANNEL,
+                    "status": "success",
                 },
             )
 
         except Exception as e:
             logger.error(
-                f"Failed to publish failure event: {e}",
-                extra={"event": event, "error": str(e)},
+                "Failed to publish failure event",
+                extra={
+                    "correlation_id": correlation_id,
+                    "error_type": "publish_error",
+                    "error_class": type(e).__name__,
+                    "event": event,
+                    "chat": chat,
+                    "date": date,
+                },
+                exc_info=True,
             )

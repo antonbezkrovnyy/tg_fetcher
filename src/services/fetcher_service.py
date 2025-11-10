@@ -14,12 +14,14 @@ from telethon.tl.custom import Message as TelethonMessage
 from telethon.tl.types import Channel, Chat, MessageReactions, User
 
 from src.core.config import FetcherConfig
+from src.core.exceptions import ChatNotFoundError, DataValidationError, NetworkError
 from src.models.schemas import ForwardInfo, Message, Reaction, SourceInfo
 from src.repositories.message_repository import MessageRepository
 from src.services.progress_tracker import ProgressTracker
 from src.services.session_manager import SessionManager
 from src.services.strategy.base import BaseFetchStrategy
 from src.services.strategy.yesterday import YesterdayOnlyStrategy
+from src.utils.correlation import ensure_correlation_id, get_correlation_id
 
 logger = logging.getLogger(__name__)
 
@@ -48,52 +50,95 @@ class FetcherService:
 
         # Handle progress reset if requested
         if config.progress_reset:
-            logger.warning("PROGRESS_RESET=true, resetting all progress")
+            logger.warning(
+                "Progress reset requested",
+                extra={
+                    "action": "reset_all_progress",
+                    "reason": "PROGRESS_RESET=true",
+                },
+            )
             self.progress_tracker.reset_all()
 
-        # Select strategy based on fetch mode
-        self.strategy = self._create_strategy()
+        # Select strategy based on fetch mode and date
+        self.strategy = self._create_strategy(
+            config.fetch_date if config.fetch_mode == "date" else None
+        )
 
         logger.info(
             "FetcherService initialized",
             extra={
                 "strategy": self.strategy.get_strategy_name(),
-                "sources": self.config.telegram_chats,
+                "chats_count": len(self.config.telegram_chats),
+                "chats": self.config.telegram_chats,
                 "force_refetch": self.config.force_refetch,
+                "fetch_mode": self.config.fetch_mode,
             },
         )
 
-    def _create_strategy(self) -> BaseFetchStrategy:
-        """Create fetch strategy based on config.
+    def _create_strategy(self, date_str: str = None) -> BaseFetchStrategy:
+        """Create fetch strategy based on config or date_str."""
+        if self.config.fetch_mode == "date" and date_str:
+            from src.services.strategy.by_date import ByDateStrategy
 
-        Returns:
-            Strategy instance
-
-        Raises:
-            ValueError: If fetch_mode is not supported
-        """
+            return ByDateStrategy(date_str)
         if self.config.fetch_mode == "yesterday":
             return YesterdayOnlyStrategy()
-        # TODO: Implement other strategies (full, incremental, continuous, date, range)
-        # Note: This is a planned feature. For now, only 'yesterday' mode is supported.
-        # Future strategies should implement BaseFetchStrategy interface.
         else:
             raise ValueError(f"Unsupported fetch_mode: {self.config.fetch_mode}")
 
     async def run(self) -> None:
         """Run fetcher service for all configured chats."""
+        correlation_id = ensure_correlation_id()
+
+        logger.info(
+            "Starting fetcher service run",
+            extra={
+                "correlation_id": correlation_id,
+                "chats_count": len(self.config.telegram_chats),
+                "strategy": self.strategy.get_strategy_name(),
+            },
+        )
+
         async with self.session_manager as client:
             for chat_identifier in self.config.telegram_chats:
                 try:
                     await self._process_chat(client, chat_identifier)
+                except ChatNotFoundError as e:
+                    logger.error(
+                        "Chat not found or inaccessible",
+                        extra={
+                            "correlation_id": correlation_id,
+                            "error_type": "chat_not_found",
+                            "chat": chat_identifier,
+                        },
+                        exc_info=True,
+                    )
+                except NetworkError as e:
+                    logger.error(
+                        "Network error during chat processing",
+                        extra={
+                            "correlation_id": correlation_id,
+                            "error_type": "network_error",
+                            "chat": chat_identifier,
+                            "retry_count": e.retry_count,
+                        },
+                        exc_info=True,
+                    )
                 except Exception as e:
                     logger.error(
-                        f"Failed to process chat {chat_identifier}: {e}",
-                        extra={"chat": chat_identifier},
+                        "Failed to process chat",
+                        extra={
+                            "correlation_id": correlation_id,
+                            "error_type": "unknown_error",
+                            "error_class": type(e).__name__,
+                            "chat": chat_identifier,
+                        },
                         exc_info=True,
                     )
 
-    async def fetch_single_chat(self, chat_identifier: str) -> dict[str, Any]:
+    async def fetch_single_chat(
+        self, chat_identifier: str, date_str: str = None
+    ) -> dict[str, Any]:
         """Fetch messages from a single chat (for daemon mode commands).
 
         Args:
@@ -123,31 +168,43 @@ class FetcherService:
                 source_info = self._extract_source_info(entity, chat_identifier)
                 result["source_id"] = source_info.id
 
+                # Выбор стратегии по наличию даты
+                strategy = self._create_strategy(date_str)
+
                 # Get date ranges from strategy
-                async for start_date, end_date in self.strategy.get_date_ranges(
+                async for start_date, end_date in strategy.get_date_ranges(
                     client, entity
                 ):
+                    # Пропуск, если файл уже существует
+                    import os
+
+                    file_path = (
+                        f"data/{source_info.id}/"
+                        f"{source_info.id}_{start_date.isoformat()}.json"
+                    )
+                    if os.path.exists(file_path):
+                        logger.info(
+                            f"File already exists for {file_path}, skipping fetch."
+                        )
+                        continue
                     # Process this date range
-                    await self._process_date_range(
+                    fetched_count = await self._process_date_range(
                         client, entity, source_info, start_date, end_date
                     )
-
-                    # Track processed date
+                    # Track processed date and add to total count
                     result["dates"].append(start_date.isoformat())
-
-                    # Get message count from progress (approximate)
-                    # Note: More accurate tracking would require
-                    # modifying _process_date_range
-
-                # Build file path (assume yesterday strategy)
+                    result["message_count"] += fetched_count
+                # Build file path
                 if result["dates"]:
                     latest_date = result["dates"][0]
                     result["file_path"] = (
                         f"data/{source_info.id}/" f"{source_info.id}_{latest_date}.json"
                     )
-
+                logger.info(
+                    f"Fetch completed for chat {chat_identifier}",
+                    extra={"dates": result["dates"]},
+                )
                 return result
-
             except Exception as e:
                 logger.error(
                     f"Failed to fetch single chat {chat_identifier}: {e}",
@@ -163,7 +220,17 @@ class FetcherService:
             client: Authenticated Telegram client
             chat_identifier: Chat username or ID
         """
-        logger.info(f"Processing chat: {chat_identifier}")
+        correlation_id = get_correlation_id()
+        start_time = datetime.utcnow()
+
+        logger.info(
+            "Processing chat",
+            extra={
+                "correlation_id": correlation_id,
+                "chat": chat_identifier,
+                "strategy": self.strategy.get_strategy_name(),
+            },
+        )
 
         # Get entity (channel, chat, or user)
         entity = await client.get_entity(chat_identifier)
@@ -184,7 +251,7 @@ class FetcherService:
         source_info: SourceInfo,
         start_date: date,
         end_date: date,
-    ) -> None:
+    ) -> int:
         """Process messages for a date range.
 
         Args:
@@ -193,28 +260,38 @@ class FetcherService:
             source_info: Source metadata
             start_date: Start date (inclusive)
             end_date: End date (inclusive)
+
+        Returns:
+            Number of messages fetched
         """
+        correlation_id = get_correlation_id()
+        start_time = datetime.utcnow()
+
         # Check if already completed (unless force_refetch is enabled)
         if not self.config.force_refetch and self.progress_tracker.is_date_completed(
             source_info.id, start_date
         ):
             logger.info(
-                f"Skipping {source_info.id} for {start_date} - already completed",
+                "Skipping date range - already completed",
                 extra={
+                    "correlation_id": correlation_id,
                     "source": source_info.id,
                     "date": start_date.isoformat(),
                     "reason": "already_completed",
+                    "force_refetch": False,
                 },
             )
-            return
+            return 0
 
         # Mark as in progress
         self.progress_tracker.mark_in_progress(source_info.id, start_date)
 
         logger.info(
-            f"Fetching messages for {source_info.id}",
+            "Starting message fetch for date range",
             extra={
+                "correlation_id": correlation_id,
                 "source": source_info.id,
+                "source_title": source_info.title,
                 "start_date": start_date.isoformat(),
                 "end_date": end_date.isoformat(),
             },
@@ -239,8 +316,9 @@ class FetcherService:
         ).replace(tzinfo=timezone.utc)
 
         logger.info(
-            "Fetching messages for date range",
+            "Calculated date range boundaries",
             extra={
+                "correlation_id": correlation_id,
                 "source": source_info.id,
                 "start_date": start_date.isoformat(),
                 "end_date": end_date.isoformat(),
@@ -253,7 +331,14 @@ class FetcherService:
         # offset_date=end means "start from this date and go backwards"
         # reverse=False is default (newest to oldest)
 
-        logger.info(f"Starting message iteration for {source_info.id}")
+        logger.info(
+            "Starting message iteration",
+            extra={
+                "correlation_id": correlation_id,
+                "source": source_info.id,
+                "offset_date": end_datetime.isoformat(),
+            },
+        )
         messages_processed = 0
 
         async for message in client.iter_messages(
@@ -264,11 +349,17 @@ class FetcherService:
 
             msg_datetime = message.date
 
-            # Log every 10 messages to track progress
-            if messages_processed % 10 == 0 and messages_processed > 0:
+            # Log every 100 messages to track progress (changed from 10 to reduce noise)
+            if messages_processed % 100 == 0 and messages_processed > 0:
                 logger.info(
-                    f"Processed {messages_processed} messages for {source_info.id}, "
-                    f"fetched {messages_fetched}, current msg date: {msg_datetime}"
+                    "Message iteration progress",
+                    extra={
+                        "correlation_id": correlation_id,
+                        "source": source_info.id,
+                        "messages_processed": messages_processed,
+                        "messages_fetched": messages_fetched,
+                        "current_msg_date": msg_datetime.isoformat(),
+                    },
                 )
 
             messages_processed += 1
@@ -280,9 +371,14 @@ class FetcherService:
             # Stop when we reach messages before our start date
             if msg_datetime < start_datetime:
                 logger.info(
-                    f"Reached start date boundary, stopping. "
-                    f"Processed {messages_processed} messages, "
-                    f"fetched {messages_fetched}"
+                    "Reached start date boundary",
+                    extra={
+                        "correlation_id": correlation_id,
+                        "source": source_info.id,
+                        "messages_processed": messages_processed,
+                        "messages_fetched": messages_fetched,
+                        "boundary_reached": start_datetime.isoformat(),
+                    },
                 )
                 break
 
@@ -299,10 +395,28 @@ class FetcherService:
 
             messages_fetched += 1
 
+        # Calculate duration
+        duration = (datetime.utcnow() - start_time).total_seconds()
+
         # Save collection and update progress
         self._save_and_mark_complete(
             source_info, start_date, collection, messages_fetched
         )
+
+        logger.info(
+            "Date range fetch completed",
+            extra={
+                "correlation_id": correlation_id,
+                "source": source_info.id,
+                "date": start_date.isoformat(),
+                "messages_fetched": messages_fetched,
+                "messages_processed": messages_processed,
+                "duration_seconds": round(duration, 2),
+                "status": "success",
+            },
+        )
+
+        return messages_fetched
 
     def _save_and_mark_complete(
         self,
@@ -319,27 +433,45 @@ class FetcherService:
             collection: Message collection
             message_count: Number of messages fetched
         """
+        correlation_id = get_correlation_id()
         last_message_id = None
 
         if message_count > 0:
-            self.repository.save_collection(
-                source_name=source_info.id,
-                target_date=target_date,
-                collection=collection,
-            )
+            try:
+                self.repository.save_collection(
+                    source_name=source_info.id,
+                    target_date=target_date,
+                    collection=collection,
+                )
 
-            # Get last message ID for progress tracking
-            if collection.messages:
-                last_message_id = collection.messages[-1].id
+                # Get last message ID for progress tracking
+                if collection.messages:
+                    last_message_id = collection.messages[-1].id
 
-            logger.info(
-                f"Saved {message_count} messages",
-                extra={
-                    "source": source_info.id,
-                    "date": target_date.isoformat(),
-                    "count": message_count,
-                },
-            )
+                logger.info(
+                    "Messages saved successfully",
+                    extra={
+                        "correlation_id": correlation_id,
+                        "source": source_info.id,
+                        "date": target_date.isoformat(),
+                        "message_count": message_count,
+                        "last_message_id": last_message_id,
+                        "action": "save_collection",
+                    },
+                )
+            except Exception as e:
+                logger.error(
+                    "Failed to save message collection",
+                    extra={
+                        "correlation_id": correlation_id,
+                        "error_type": "save_error",
+                        "source": source_info.id,
+                        "date": target_date.isoformat(),
+                        "message_count": message_count,
+                    },
+                    exc_info=True,
+                )
+                raise
         else:
             logger.info(
                 f"No messages found for {source_info.id} on {target_date}",

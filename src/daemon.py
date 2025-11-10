@@ -14,10 +14,17 @@ from typing import Any, Dict
 from pydantic import ValidationError
 
 from src.core.config import FetcherConfig
+from src.core.exceptions import (
+    ChatNotFoundError,
+    FloodWaitError,
+    NetworkError,
+    TelegramAuthError,
+)
 from src.observability.logging_config import get_logger, setup_logging
 from src.services.command_subscriber import CommandSubscriber
 from src.services.event_publisher import EventPublisher
 from src.services.fetcher_service import FetcherService
+from src.utils.correlation import CorrelationContext, ensure_correlation_id
 
 
 class FetcherDaemon:
@@ -118,105 +125,230 @@ class FetcherDaemon:
         self.running = False
 
     async def _handle_fetch_command(self, command: Dict[str, Any]) -> None:
-        """Handle fetch command from Redis.
+        """Handle fetch command from Redis with full tracing and error handling.
 
         Args:
             command: Command dict with fetch parameters
         """
-        chat = command.get("chat")
-        days_back = command.get("days_back", 1)
-        limit = command.get("limit", 1000)
-        strategy = command.get("strategy", "recent")
-        requested_by = command.get("requested_by", "unknown")
+        # Generate correlation ID for this command
+        with CorrelationContext() as correlation_id:
+            chat = command.get("chat")
+            days_back = command.get("days_back", 1)
+            limit = command.get("limit", 1000)
+            strategy = command.get("strategy", "recent")
+            requested_by = command.get("requested_by", "unknown")
+            date_str = command.get("date")
 
-        if not chat:
-            self.logger.error(
-                "Command missing 'chat' parameter", extra={"command": command}
-            )
-            return
-
-        self.logger.info(
-            f"Processing fetch command for {chat}",
-            extra={
-                "chat": chat,
-                "days_back": days_back,
-                "limit": limit,
-                "strategy": strategy,
-                "requested_by": requested_by,
-                "worker_id": self.worker_id,
-            },
-        )
-
-        start_time = datetime.utcnow()
-
-        try:
-            # Execute fetch for each requested day
-            for day_offset in range(days_back):
-                fetch_date = (datetime.utcnow() - timedelta(days=day_offset)).strftime(
-                    "%Y-%m-%d"
-                )
-
-                self.logger.info(
-                    f"Fetching {chat} for {fetch_date}",
+            # Validation
+            if not chat:
+                self.logger.error(
+                    "Command validation failed: missing 'chat' parameter",
                     extra={
-                        "chat": chat,
-                        "date": fetch_date,
+                        "correlation_id": correlation_id,
+                        "command": command,
                         "worker_id": self.worker_id,
+                        "error_type": "validation_error",
                     },
                 )
+                return
 
-                # Create fetcher service
-                service = FetcherService(self.config)
+            self.logger.info(
+                "Processing fetch command",
+                extra={
+                    "correlation_id": correlation_id,
+                    "chat": chat,
+                    "days_back": days_back,
+                    "limit": limit,
+                    "strategy": strategy,
+                    "requested_by": requested_by,
+                    "worker_id": self.worker_id,
+                    "mode": "date" if date_str else "recent",
+                    "date": date_str,
+                },
+            )
 
-                # Fetch specified chat using new single chat method
-                result = await service.fetch_single_chat(chat)
+            start_time = datetime.utcnow()
 
-                if result and self.event_publisher:
-                    # Publish success event
-                    duration = (datetime.utcnow() - start_time).total_seconds()
-
-                    self.event_publisher.publish_fetch_complete(
-                        chat=chat,
-                        date=fetch_date,
-                        message_count=result.get("message_count", 0),
-                        file_path=result.get("file_path", ""),
-                        duration_seconds=duration,
-                    )
+            try:
+                # Execute fetch for each requested day
+                for day_offset in range(days_back):
+                    fetch_date = (
+                        datetime.utcnow() - timedelta(days=day_offset)
+                    ).strftime("%Y-%m-%d")
 
                     self.logger.info(
-                        f"Fetch completed successfully for {chat}/{fetch_date}",
+                        "Starting fetch operation",
                         extra={
+                            "correlation_id": correlation_id,
                             "chat": chat,
                             "date": fetch_date,
-                            "message_count": result.get("message_count", 0),
-                            "duration_seconds": round(duration, 2),
+                            "day_offset": day_offset,
                             "worker_id": self.worker_id,
                         },
                     )
-                else:
-                    raise Exception("Fetch returned no result")
 
-        except Exception as e:
-            # Publish failure event
-            duration = (datetime.utcnow() - start_time).total_seconds()
+                    # Create fetcher service config for this request
+                    fetch_config = self.config.model_copy(deep=True)
+                    if date_str:
+                        fetch_config.fetch_mode = "date"
+                        fetch_config.fetch_date = date_str
+                    service = FetcherService(fetch_config)
 
-            if self.event_publisher:
-                self.event_publisher.publish_fetch_failed(
-                    chat=chat,
-                    date=fetch_date,
-                    error=str(e),
-                    duration_seconds=duration,
+                    # Fetch with the specified date or calculated fetch_date
+                    actual_date = date_str if date_str else fetch_date
+                    result = await service.fetch_single_chat(chat, actual_date)
+
+                    if result and self.event_publisher:
+                        # Publish success event
+                        duration = (datetime.utcnow() - start_time).total_seconds()
+
+                        self.event_publisher.publish_fetch_complete(
+                            chat=chat,
+                            date=actual_date,
+                            message_count=result.get("message_count", 0),
+                            file_path=result.get("file_path", ""),
+                            duration_seconds=duration,
+                        )
+
+                        self.logger.info(
+                            "Fetch completed successfully",
+                            extra={
+                                "correlation_id": correlation_id,
+                                "chat": chat,
+                                "date": actual_date,
+                                "message_count": result.get("message_count", 0),
+                                "duration_seconds": round(duration, 2),
+                                "worker_id": self.worker_id,
+                                "status": "success",
+                            },
+                        )
+                    else:
+                        raise Exception("Fetch returned no result")
+
+            except TelegramAuthError as e:
+                # Auth errors - don't retry
+                duration = (datetime.utcnow() - start_time).total_seconds()
+                self.logger.error(
+                    "Telegram authentication failed",
+                    extra={
+                        "correlation_id": correlation_id,
+                        "error_type": "auth_error",
+                        "chat": chat,
+                        "phone": getattr(e, "phone", None),
+                        "worker_id": self.worker_id,
+                        "duration_seconds": round(duration, 2),
+                        "status": "failed",
+                    },
+                    exc_info=True,
                 )
 
-            self.logger.error(
-                f"Fetch failed for {chat}",
-                extra={
-                    "chat": chat,
-                    "error": str(e),
-                    "worker_id": self.worker_id,
-                },
-                exc_info=True,
-            )
+                if self.event_publisher:
+                    self.event_publisher.publish_fetch_failed(
+                        chat=chat,
+                        date=date_str or fetch_date,
+                        error=f"auth_error: {str(e)}",
+                        duration_seconds=duration,
+                    )
+
+            except FloodWaitError as e:
+                # Rate limit - log and wait
+                duration = (datetime.utcnow() - start_time).total_seconds()
+                self.logger.warning(
+                    "Telegram rate limit hit",
+                    extra={
+                        "correlation_id": correlation_id,
+                        "error_type": "rate_limit",
+                        "chat": chat,
+                        "wait_seconds": e.wait_seconds,
+                        "worker_id": self.worker_id,
+                        "duration_seconds": round(duration, 2),
+                        "status": "rate_limited",
+                    },
+                )
+
+                # Should implement retry with backoff here
+                # For now, just publish failure event
+                if self.event_publisher:
+                    self.event_publisher.publish_fetch_failed(
+                        chat=chat,
+                        date=date_str or fetch_date,
+                        error=f"rate_limit: wait {e.wait_seconds}s",
+                        duration_seconds=duration,
+                    )
+
+            except NetworkError as e:
+                # Network errors - can retry
+                duration = (datetime.utcnow() - start_time).total_seconds()
+                self.logger.error(
+                    "Network error during fetch",
+                    extra={
+                        "correlation_id": correlation_id,
+                        "error_type": "network_error",
+                        "chat": chat,
+                        "retry_count": e.retry_count,
+                        "worker_id": self.worker_id,
+                        "duration_seconds": round(duration, 2),
+                        "status": "failed",
+                    },
+                    exc_info=True,
+                )
+
+                if self.event_publisher:
+                    self.event_publisher.publish_fetch_failed(
+                        chat=chat,
+                        date=date_str or fetch_date,
+                        error=f"network_error: {str(e)}",
+                        duration_seconds=duration,
+                    )
+
+            except ChatNotFoundError as e:
+                # Chat doesn't exist - don't retry
+                duration = (datetime.utcnow() - start_time).total_seconds()
+                self.logger.error(
+                    "Chat not found",
+                    extra={
+                        "correlation_id": correlation_id,
+                        "error_type": "chat_not_found",
+                        "chat": chat,
+                        "worker_id": self.worker_id,
+                        "duration_seconds": round(duration, 2),
+                        "status": "failed",
+                    },
+                    exc_info=True,
+                )
+
+                if self.event_publisher:
+                    self.event_publisher.publish_fetch_failed(
+                        chat=chat,
+                        date=date_str or fetch_date,
+                        error=f"chat_not_found: {str(e)}",
+                        duration_seconds=duration,
+                    )
+
+            except Exception as e:
+                # Unknown errors - log with full context
+                duration = (datetime.utcnow() - start_time).total_seconds()
+                self.logger.error(
+                    "Unexpected error during fetch",
+                    extra={
+                        "correlation_id": correlation_id,
+                        "error_type": "unknown_error",
+                        "chat": chat,
+                        "error_class": type(e).__name__,
+                        "worker_id": self.worker_id,
+                        "duration_seconds": round(duration, 2),
+                        "status": "failed",
+                    },
+                    exc_info=True,
+                )
+
+                if self.event_publisher:
+                    self.event_publisher.publish_fetch_failed(
+                        chat=chat,
+                        date=date_str or fetch_date,
+                        error=f"{type(e).__name__}: {str(e)}",
+                        duration_seconds=duration,
+                    )
 
 
 async def main() -> int:

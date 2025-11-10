@@ -1,0 +1,406 @@
+"""Integration tests for file operations and progress tracking.
+
+Tests file writes, progress.json persistence, and force-mode behavior.
+"""
+
+import json
+import pytest
+import pytest_asyncio
+from datetime import date
+from pathlib import Path
+from typing import Generator
+import tempfile
+import shutil
+
+from src.core.progress import ProgressTracker, CommandProgress
+from src.models.command import FetchCommand, FetchMode, FetchStrategy
+
+
+@pytest.fixture
+def temp_dir() -> Generator[Path, None, None]:
+    """Provide temporary directory for test files."""
+    temp_path = Path(tempfile.mkdtemp())
+    try:
+        yield temp_path
+    finally:
+        shutil.rmtree(temp_path, ignore_errors=True)
+
+
+@pytest.fixture
+def progress_tracker(temp_dir: Path) -> ProgressTracker:
+    """Provide ProgressTracker with temporary storage."""
+    progress_file = temp_dir / "progress.json"
+    return ProgressTracker(str(progress_file))
+
+
+class TestProgressFileOperations:
+    """Test progress.json file operations."""
+
+    @pytest.mark.integration
+    def test_create_progress_file(self, progress_tracker: ProgressTracker, temp_dir: Path):
+        """Test progress file is created on first write."""
+        progress_file = temp_dir / "progress.json"
+        assert not progress_file.exists()
+
+        cmd = FetchCommand(command="fetch", chat="@testchat",
+            mode=FetchMode.DATE,
+            date=date(2025, 1, 15),
+            strategy=FetchStrategy.BATCH,
+        )
+
+        progress_tracker.start_command(cmd)
+        assert progress_file.exists()
+
+    @pytest.mark.integration
+    def test_progress_file_atomic_write(
+        self, progress_tracker: ProgressTracker, temp_dir: Path
+    ):
+        """Test atomic writes prevent corruption."""
+        cmd = FetchCommand(command="fetch", chat="@testchat",
+            mode=FetchMode.DATE,
+            date=date(2025, 1, 15),
+            strategy=FetchStrategy.BATCH,
+        )
+
+        progress_tracker.start_command(cmd)
+
+        # Read file content directly
+        progress_file = temp_dir / "progress.json"
+        with open(progress_file, "r") as f:
+            data = json.load(f)
+
+        assert cmd.command_id in data
+        assert data[cmd.command_id]["status"] == "in_progress"
+
+    @pytest.mark.integration
+    def test_progress_persists_across_instances(self, temp_dir: Path):
+        """Test progress persists when creating new tracker instance."""
+        progress_file = temp_dir / "progress.json"
+        tracker1 = ProgressTracker(str(progress_file))
+
+        cmd = FetchCommand(command="fetch", chat="@testchat",
+            mode=FetchMode.DATE,
+            date=date(2025, 1, 15),
+            strategy=FetchStrategy.BATCH,
+        )
+
+        tracker1.start_command(cmd)
+        tracker1.mark_date_processed(cmd.command_id, date(2025, 1, 15))
+
+        # Create new instance
+        tracker2 = ProgressTracker(str(progress_file))
+
+        # Should have persisted data
+        assert tracker2.is_date_processed(cmd.command_id, date(2025, 1, 15))
+
+    @pytest.mark.integration
+    def test_concurrent_writes_thread_safe(
+        self, progress_tracker: ProgressTracker
+    ):
+        """Test thread-safe concurrent writes."""
+        import threading
+
+        commands = [
+            FetchCommand(command="fetch", chat=f"@chat{i}",
+                mode=FetchMode.DATE,
+                date=date(2025, 1, 10 + i),
+                strategy=FetchStrategy.BATCH,
+            )
+            for i in range(10)
+        ]
+
+        def write_progress(cmd: FetchCommand):
+            progress_tracker.start_command(cmd)
+            progress_tracker.mark_date_processed(cmd.command_id, cmd.date)
+            progress_tracker.complete_command(cmd.command_id)
+
+        threads = [threading.Thread(target=write_progress, args=(cmd,)) for cmd in commands]
+
+        # Start all threads
+        for thread in threads:
+            thread.start()
+
+        # Wait for completion
+        for thread in threads:
+            thread.join()
+
+        # Verify all commands processed
+        for cmd in commands:
+            assert progress_tracker.is_date_processed(cmd.command_id, cmd.date)
+
+
+class TestProgressTracking:
+    """Test progress tracking logic."""
+
+    @pytest.mark.integration
+    def test_start_command(self, progress_tracker: ProgressTracker):
+        """Test starting command tracking."""
+        cmd = FetchCommand(command="fetch", chat="@testchat",
+            mode=FetchMode.DATE,
+            date=date(2025, 1, 15),
+            strategy=FetchStrategy.BATCH,
+        )
+
+        progress_tracker.start_command(cmd)
+
+        # Should be in progress
+        progress = progress_tracker.get_command_progress(cmd.command_id)
+        assert progress is not None
+        assert progress.status == "in_progress"
+        assert progress.chat == "@testchat"
+
+    @pytest.mark.integration
+    def test_mark_date_processed(self, progress_tracker: ProgressTracker):
+        """Test marking individual date as processed."""
+        cmd = FetchCommand(command="fetch", chat="@testchat",
+            mode=FetchMode.DAYS,
+            days=3,
+            strategy=FetchStrategy.BATCH,
+        )
+
+        progress_tracker.start_command(cmd)
+        target_date = date(2025, 1, 15)
+        progress_tracker.mark_date_processed(cmd.command_id, target_date)
+
+        assert progress_tracker.is_date_processed(cmd.command_id, target_date)
+
+    @pytest.mark.integration
+    def test_complete_command(self, progress_tracker: ProgressTracker):
+        """Test completing command tracking."""
+        cmd = FetchCommand(command="fetch", chat="@testchat",
+            mode=FetchMode.DATE,
+            date=date(2025, 1, 15),
+            strategy=FetchStrategy.BATCH,
+        )
+
+        progress_tracker.start_command(cmd)
+        progress_tracker.complete_command(cmd.command_id)
+
+        progress = progress_tracker.get_command_progress(cmd.command_id)
+        assert progress.status == "completed"
+
+    @pytest.mark.integration
+    def test_fail_command(self, progress_tracker: ProgressTracker):
+        """Test failing command tracking."""
+        cmd = FetchCommand(command="fetch", chat="@testchat",
+            mode=FetchMode.DATE,
+            date=date(2025, 1, 15),
+            strategy=FetchStrategy.BATCH,
+        )
+
+        progress_tracker.start_command(cmd)
+        progress_tracker.fail_command(cmd.command_id, "Test error")
+
+        progress = progress_tracker.get_command_progress(cmd.command_id)
+        assert progress.status == "failed"
+        assert progress.error_message == "Test error"
+
+    @pytest.mark.integration
+    def test_multiple_dates_tracking(self, progress_tracker: ProgressTracker):
+        """Test tracking multiple dates for same command."""
+        cmd = FetchCommand(command="fetch", chat="@testchat",
+            mode=FetchMode.RANGE,
+            from_date=date(2025, 1, 10),
+            to_date=date(2025, 1, 15),
+            strategy=FetchStrategy.BATCH,
+        )
+
+        progress_tracker.start_command(cmd)
+
+        dates = cmd.expand_dates()
+        for target_date in dates:
+            progress_tracker.mark_date_processed(cmd.command_id, target_date)
+
+        # All dates should be marked
+        for target_date in dates:
+            assert progress_tracker.is_date_processed(cmd.command_id, target_date)
+
+        progress = progress_tracker.get_command_progress(cmd.command_id)
+        assert len(progress.processed_dates) == len(dates)
+
+
+class TestForceMode:
+    """Test force re-fetch mode behavior."""
+
+    @pytest.mark.integration
+    def test_force_bypasses_duplicate_check(self, progress_tracker: ProgressTracker):
+        """Test force=True bypasses processed check."""
+        cmd = FetchCommand(command="fetch", chat="@testchat",
+            mode=FetchMode.DATE,
+            date=date(2025, 1, 15),
+            strategy=FetchStrategy.BATCH,
+        )
+
+        progress_tracker.start_command(cmd)
+        progress_tracker.mark_date_processed(cmd.command_id, date(2025, 1, 15))
+
+        # Without force, should be processed
+        assert progress_tracker.is_date_processed(cmd.command_id, date(2025, 1, 15), force=False)
+
+        # With force, should not be processed (allows reprocessing)
+        assert not progress_tracker.is_date_processed(
+            cmd.command_id, date(2025, 1, 15), force=True
+        )
+
+    @pytest.mark.integration
+    def test_force_command_reprocessing(self, progress_tracker: ProgressTracker):
+        """Test reprocessing same dates with force flag."""
+        cmd_normal = FetchCommand(command="fetch", chat="@testchat",
+            mode=FetchMode.DATE,
+            date=date(2025, 1, 15),
+            strategy=FetchStrategy.BATCH,
+            force=False,
+        )
+
+        cmd_force = FetchCommand(command="fetch", chat="@testchat",
+            mode=FetchMode.DATE,
+            date=date(2025, 1, 15),
+            strategy=FetchStrategy.BATCH,
+            force=True,
+        )
+
+        # Process first time
+        progress_tracker.start_command(cmd_normal)
+        progress_tracker.mark_date_processed(cmd_normal.command_id, date(2025, 1, 15))
+        progress_tracker.complete_command(cmd_normal.command_id)
+
+        # Second command with force should be allowed
+        progress_tracker.start_command(cmd_force)
+        # Force means we don't check is_date_processed before processing
+        assert not progress_tracker.is_date_processed(
+            cmd_force.command_id, date(2025, 1, 15), force=True
+        )
+
+
+class TestOutputPaths:
+    """Test output file path generation."""
+
+    @pytest.mark.integration
+    def test_output_path_generation(self, temp_dir: Path):
+        """Test generating output file paths."""
+        cmd = FetchCommand(command="fetch", chat="@testchat",
+            mode=FetchMode.DATE,
+            date=date(2025, 1, 15),
+            strategy=FetchStrategy.BATCH,
+        )
+
+        output_path = cmd.get_output_path(str(temp_dir), date(2025, 1, 15))
+        expected_path = temp_dir / "testchat" / "2025" / "discussions_2025-01-15.json"
+
+        assert Path(output_path) == expected_path
+
+    @pytest.mark.integration
+    def test_output_directory_creation(self, temp_dir: Path):
+        """Test output directory is created if missing."""
+        cmd = FetchCommand(command="fetch", chat="@testchat",
+            mode=FetchMode.DATE,
+            date=date(2025, 1, 15),
+            strategy=FetchStrategy.BATCH,
+        )
+
+        output_path = cmd.get_output_path(str(temp_dir), date(2025, 1, 15))
+        output_dir = Path(output_path).parent
+
+        # Create the file
+        output_dir.mkdir(parents=True, exist_ok=True)
+        Path(output_path).write_text("{}")
+
+        assert Path(output_path).exists()
+        assert output_dir.exists()
+
+    @pytest.mark.integration
+    def test_output_paths_unique_per_date(self, temp_dir: Path):
+        """Test each date gets unique output path."""
+        cmd = FetchCommand(command="fetch", chat="@testchat",
+            mode=FetchMode.RANGE,
+            from_date=date(2025, 1, 10),
+            to_date=date(2025, 1, 12),
+            strategy=FetchStrategy.BATCH,
+        )
+
+        paths = [cmd.get_output_path(str(temp_dir), d) for d in cmd.expand_dates()]
+
+        # All paths should be unique
+        assert len(paths) == len(set(paths))
+
+        # Each should have correct date in filename
+        for i, path in enumerate(paths):
+            target_date = date(2025, 1, 10 + i)
+            assert target_date.isoformat() in path
+
+
+class TestDataPersistence:
+    """Test data persistence and recovery."""
+
+    @pytest.mark.integration
+    def test_recover_from_incomplete_command(
+        self, progress_tracker: ProgressTracker
+    ):
+        """Test recovering from incomplete command processing."""
+        cmd = FetchCommand(command="fetch", chat="@testchat",
+            mode=FetchMode.RANGE,
+            from_date=date(2025, 1, 10),
+            to_date=date(2025, 1, 15),
+            strategy=FetchStrategy.BATCH,
+        )
+
+        progress_tracker.start_command(cmd)
+
+        # Process only some dates
+        progress_tracker.mark_date_processed(cmd.command_id, date(2025, 1, 10))
+        progress_tracker.mark_date_processed(cmd.command_id, date(2025, 1, 11))
+
+        # Simulate crash - don't complete command
+
+        # On restart, should be able to resume
+        all_dates = cmd.expand_dates()
+        remaining_dates = [
+            d
+            for d in all_dates
+            if not progress_tracker.is_date_processed(cmd.command_id, d)
+        ]
+
+        assert len(remaining_dates) == 4  # 12, 13, 14, 15
+
+    @pytest.mark.integration
+    def test_progress_file_corruption_recovery(self, temp_dir: Path):
+        """Test handling corrupted progress file."""
+        progress_file = temp_dir / "progress.json"
+
+        # Write invalid JSON
+        progress_file.write_text("{invalid json")
+
+        # Should handle gracefully and start fresh
+        tracker = ProgressTracker(str(progress_file))
+
+        cmd = FetchCommand(command="fetch", chat="@testchat",
+            mode=FetchMode.DATE,
+            date=date(2025, 1, 15),
+            strategy=FetchStrategy.BATCH,
+        )
+
+        # Should work despite corruption
+        tracker.start_command(cmd)
+        assert tracker.get_command_progress(cmd.command_id) is not None
+
+    @pytest.mark.integration
+    def test_cleanup_old_progress(self, progress_tracker: ProgressTracker):
+        """Test cleaning up old completed commands."""
+        # Create multiple completed commands
+        commands = [
+            FetchCommand(command="fetch", chat=f"@chat{i}",
+                mode=FetchMode.DATE,
+                date=date(2025, 1, 10 + i),
+                strategy=FetchStrategy.BATCH,
+            )
+            for i in range(5)
+        ]
+
+        for cmd in commands:
+            progress_tracker.start_command(cmd)
+            progress_tracker.complete_command(cmd.command_id)
+
+        # Could implement cleanup method to remove old completed commands
+        # This test documents the need for such functionality
+        # tracker.cleanup_completed(older_than_days=7)
+

@@ -84,6 +84,13 @@ Once running:
 - **Loki**: http://localhost:3100
 - **Pushgateway**: http://localhost:9091
 
+Note about observability stack
+------------------------------
+
+The observability stack (Grafana / Prometheus / Loki / Pushgateway) is managed outside this repository in the workspace-level `infrastructure/` directory. If you use the monorepo/workspace provided here, start the observability services from that folder (see `infrastructure/` in the workspace root). This repository's `docker-compose.yml` expects those services to be available on the `tg-infrastructure` Docker network (see `docker-compose.yml` for service names).
+
+If you prefer a local, self-contained run for development, see `docs/OBSERVABILITY.md` for quick instructions.
+
 ## 🛠️ Development Scripts
 
 ### Windows (PowerShell)

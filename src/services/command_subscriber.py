@@ -101,8 +101,13 @@ class CommandSubscriber:
 
         self._running = True
         logger.info(
-            "Started listening for commands (queue pattern)...",
-            extra={"worker_id": self.worker_id, "queue": self.COMMANDS_QUEUE},
+            "Started listening for commands",
+            extra={
+                "worker_id": self.worker_id,
+                "queue": self.COMMANDS_QUEUE,
+                "pattern": "queue (BLPOP)",
+                "timeout": timeout,
+            },
         )
 
         try:
@@ -116,54 +121,97 @@ class CommandSubscriber:
                     await self._handle_command(command_json)
 
         except KeyboardInterrupt:
-            logger.info("Received interrupt signal, stopping...")
+            logger.info(
+                "Received interrupt signal",
+                extra={"worker_id": self.worker_id, "reason": "keyboard_interrupt"},
+            )
         except Exception as e:
             logger.error(f"Error in listen loop: {e}", exc_info=True)
         finally:
             self._running = False
 
     async def _handle_command(self, command_json: str) -> None:
-        """Handle incoming Redis command.
+        """Handle incoming Redis command with validation and error handling.
 
         Args:
             command_json: JSON string with command data
         """
+        start_time = datetime.utcnow()
+
         try:
             # Parse command
             command_data = json.loads(command_json)
             logger.info(
-                "Received command",
+                "Received command from queue",
                 extra={
+                    "worker_id": self.worker_id,
                     "command": command_data.get("command"),
                     "chat": command_data.get("chat"),
+                    "mode": command_data.get("mode"),
+                    "date": command_data.get("date"),
                     "requested_by": command_data.get("requested_by"),
-                    "worker_id": self.worker_id,
+                    "timestamp": command_data.get("timestamp"),
                 },
             )
 
             # Validate command
             if command_data.get("command") != "fetch":
                 logger.warning(
-                    f"Unknown command: {command_data.get('command')}",
-                    extra={"command_data": command_data},
+                    "Unknown command type",
+                    extra={
+                        "worker_id": self.worker_id,
+                        "error_type": "validation_error",
+                        "command_type": command_data.get("command"),
+                        "command_data": command_data,
+                    },
                 )
                 return
 
             # Execute command
             if self.command_handler:
                 await self.command_handler(command_data)
+
+                # Log success
+                duration = (datetime.utcnow() - start_time).total_seconds()
+                logger.info(
+                    "Command executed successfully",
+                    extra={
+                        "worker_id": self.worker_id,
+                        "command": "fetch",
+                        "chat": command_data.get("chat"),
+                        "duration_seconds": round(duration, 2),
+                        "status": "success",
+                    },
+                )
             else:
-                logger.warning("No command handler registered")
+                logger.warning(
+                    "No command handler registered",
+                    extra={"worker_id": self.worker_id, "error_type": "config_error"},
+                )
 
         except json.JSONDecodeError as e:
             logger.error(
-                f"Failed to parse command JSON: {e}",
-                extra={"command_json": command_json},
+                "Failed to parse command JSON",
+                extra={
+                    "worker_id": self.worker_id,
+                    "error_type": "json_decode_error",
+                    "command_json": command_json[:200],  # First 200 chars
+                    "error": str(e),
+                },
+                exc_info=True,
             )
         except Exception as e:
+            duration = (datetime.utcnow() - start_time).total_seconds()
             logger.error(
-                f"Error handling command: {e}",
-                extra={"command_json": command_json},
+                "Error handling command",
+                extra={
+                    "worker_id": self.worker_id,
+                    "error_type": "command_handler_error",
+                    "error_class": type(e).__name__,
+                    "command_json": command_json[:200],
+                    "duration_seconds": round(duration, 2),
+                    "status": "failed",
+                },
                 exc_info=True,
             )
 

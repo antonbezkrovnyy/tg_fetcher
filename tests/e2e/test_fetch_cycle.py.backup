@@ -1,0 +1,513 @@
+"""End-to-end tests for complete fetch cycle.
+
+Tests the full flow from command to completion with mock Telethon client.
+"""
+
+import asyncio
+import json
+import pytest
+import pytest_asyncio
+from datetime import date, datetime
+from pathlib import Path
+from typing import List, Generator
+from unittest.mock import AsyncMock, MagicMock, patch
+import tempfile
+import shutil
+
+from src.models.command import FetchCommand, FetchMode, FetchStrategy
+from src.core.progress import ProgressTracker
+
+
+class MockMessage:
+    """Mock Telethon message."""
+
+    def __init__(self, message_id: int, text: str, date: datetime):
+        self.id = message_id
+        self.text = text
+        self.date = date
+        self.sender_id = 123456
+        self.from_user = None
+        self.raw_text = text
+
+    def to_dict(self):
+        """Convert to dictionary for JSON serialization."""
+        return {
+            "id": self.id,
+            "text": self.text,
+            "date": self.date.isoformat(),
+            "sender_id": self.sender_id,
+        }
+
+
+class MockTelethonClient:
+    """Mock Telethon TelegramClient."""
+
+    def __init__(self):
+        self.messages = []
+        self.connected = False
+
+    async def __aenter__(self):
+        self.connected = True
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        self.connected = False
+
+    async def start(self):
+        """Mock client start."""
+        pass
+
+    async def get_entity(self, chat: str):
+        """Mock get_entity."""
+        return MagicMock(id=123, title=chat.lstrip("@"))
+
+    def iter_messages(self, entity, offset_date=None, reverse=False, limit=None):
+        """Mock iter_messages."""
+
+        class AsyncIterator:
+            def __init__(self, messages):
+                self.messages = messages
+                self.index = 0
+
+            def __aiter__(self):
+                return self
+
+            async def __anext__(self):
+                if self.index >= len(self.messages):
+                    raise StopAsyncIteration
+                message = self.messages[self.index]
+                self.index += 1
+                return message
+
+        return AsyncIterator(self.messages)
+
+    def add_messages(self, messages: List[MockMessage]):
+        """Add mock messages for testing."""
+        self.messages.extend(messages)
+
+
+@pytest.fixture
+def temp_dir() -> Generator[Path, None, None]:
+    """Provide temporary directory for test files."""
+    temp_path = Path(tempfile.mkdtemp())
+    try:
+        yield temp_path
+    finally:
+        shutil.rmtree(temp_path, ignore_errors=True)
+
+
+@pytest.fixture
+def progress_tracker(temp_dir: Path) -> ProgressTracker:
+    """Provide ProgressTracker."""
+    return ProgressTracker(str(temp_dir / "progress.json"))
+
+
+@pytest.fixture
+def mock_client() -> MockTelethonClient:
+    """Provide mock Telethon client."""
+    client = MockTelethonClient()
+    # Add some test messages
+    messages = [
+        MockMessage(
+            i,
+            f"Test message {i}",
+            datetime(2025, 1, 15, 12, i),
+        )
+        for i in range(1, 11)
+    ]
+    client.add_messages(messages)
+    return client
+
+
+class TestE2ESingleDateFetch:
+    """Test end-to-end single date fetch."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.e2e
+    async def test_fetch_single_date_complete_cycle(
+        self, mock_client: MockTelethonClient, temp_dir: Path, progress_tracker: ProgressTracker
+    ):
+        """Test complete fetch cycle for single date."""
+        cmd = FetchCommand(command="fetch", chat="@testchat",
+            mode=FetchMode.DATE,
+            date=date(2025, 1, 15),
+            strategy=FetchStrategy.BATCH,
+        )
+
+        # Start tracking
+        progress_tracker.start_command(cmd)
+
+        # Simulate fetch
+        async with mock_client:
+            entity = await mock_client.get_entity(cmd.chat)
+            messages = []
+            async for message in mock_client.iter_messages(entity):
+                messages.append(message)
+
+        # Write output
+        output_path = cmd.get_output_path(str(temp_dir), cmd.date)
+        output_file = Path(output_path)
+        output_file.parent.mkdir(parents=True, exist_ok=True)
+
+        output_data = {
+            "chat": cmd.chat,
+            "date": cmd.date.isoformat(),
+            "message_count": len(messages),
+            "messages": [m.to_dict() for m in messages],
+        }
+
+        with open(output_file, "w") as f:
+            json.dump(output_data, f, indent=2)
+
+        # Mark complete
+        progress_tracker.mark_date_processed(cmd.command_id, cmd.date)
+        progress_tracker.complete_command(cmd.command_id)
+
+        # Verify
+        assert output_file.exists()
+        assert progress_tracker.is_date_processed(cmd.command_id, cmd.date)
+
+        progress = progress_tracker.get_command_progress(cmd.command_id)
+        assert progress.status.value == "completed"
+
+        # Verify output content
+        with open(output_file, "r") as f:
+            data = json.load(f)
+        assert data["chat"] == "@testchat"
+        assert data["message_count"] == 10
+
+
+class TestE2EMultiDateFetch:
+    """Test end-to-end multi-date fetch."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.e2e
+    async def test_fetch_date_range(
+        self, mock_client: MockTelethonClient, temp_dir: Path, progress_tracker: ProgressTracker
+    ):
+        """Test fetching date range."""
+        cmd = FetchCommand(command="fetch", chat="@testchat",
+            mode=FetchMode.RANGE,
+            from_date=date(2025, 1, 10),
+            to_date=date(2025, 1, 12),
+            strategy=FetchStrategy.BATCH,
+        )
+
+        progress_tracker.start_command(cmd)
+
+        dates = cmd.expand_dates()
+        assert len(dates) == 3
+
+        # Fetch each date
+        async with mock_client:
+            for target_date in dates:
+                # Check if already processed (idempotency)
+                if progress_tracker.is_date_processed(cmd.command_id, target_date):
+                    continue
+
+                # Fetch messages
+                entity = await mock_client.get_entity(cmd.chat)
+                messages = []
+                async for message in mock_client.iter_messages(entity):
+                    messages.append(message)
+
+                # Write output
+                output_path = cmd.get_output_path(str(temp_dir), target_date)
+                output_file = Path(output_path)
+                output_file.parent.mkdir(parents=True, exist_ok=True)
+
+                output_data = {
+                    "chat": cmd.chat,
+                    "date": target_date.isoformat(),
+                    "message_count": len(messages),
+                    "messages": [m.to_dict() for m in messages],
+                }
+
+                with open(output_file, "w") as f:
+                    json.dump(output_data, f, indent=2)
+
+                # Mark date processed
+                progress_tracker.mark_date_processed(cmd.command_id, target_date)
+
+        # Complete command
+        progress_tracker.complete_command(cmd.command_id)
+
+        # Verify all dates processed
+        for target_date in dates:
+            assert progress_tracker.is_date_processed(cmd.command_id, target_date)
+            output_path = cmd.get_output_path(str(temp_dir), target_date)
+            assert Path(output_path).exists()
+
+
+class TestE2EEventFlow:
+    """Test end-to-end event publishing."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.e2e
+    async def test_complete_event_flow(
+        self, mock_client: MockTelethonClient, temp_dir: Path, progress_tracker: ProgressTracker
+    ):
+        """Test publishing events throughout fetch cycle."""
+        cmd = FetchCommand(command="fetch", chat="@testchat",
+            mode=FetchMode.DATE,
+            date=date(2025, 1, 15),
+            strategy=FetchStrategy.BATCH,
+        )
+
+        events = []
+
+        # Simulate event publishing
+        def publish_event(event_type: str, **params):
+            event = {
+                "event": event_type,
+                "timestamp": datetime.utcnow().isoformat(),
+                **cmd.to_event_params(),
+                **params,
+            }
+            events.append(event)
+
+        # Fetch cycle with events
+        publish_event("fetch_started")
+        progress_tracker.start_command(cmd)
+
+        async with mock_client:
+            entity = await mock_client.get_entity(cmd.chat)
+            messages = []
+            async for message in mock_client.iter_messages(entity):
+                messages.append(message)
+
+        output_path = cmd.get_output_path(str(temp_dir), cmd.date)
+        output_file = Path(output_path)
+        output_file.parent.mkdir(parents=True, exist_ok=True)
+
+        output_data = {
+            "chat": cmd.chat,
+            "date": cmd.date.isoformat(),
+            "message_count": len(messages),
+        }
+
+        with open(output_file, "w") as f:
+            json.dump(output_data, f)
+
+        publish_event("fetch_progress", processed=1, total=1)
+        progress_tracker.mark_date_processed(cmd.command_id, cmd.date)
+        progress_tracker.complete_command(cmd.command_id)
+        publish_event("fetch_completed", message_count=len(messages))
+
+        # Verify event sequence
+        assert len(events) == 3
+        assert events[0]["event"] == "fetch_started"
+        assert events[1]["event"] == "fetch_progress"
+        assert events[2]["event"] == "fetch_completed"
+        assert events[2]["message_count"] == 10
+
+
+class TestE2EErrorHandling:
+    """Test end-to-end error handling."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.e2e
+    async def test_fetch_with_error_recovery(
+        self, mock_client: MockTelethonClient, temp_dir: Path, progress_tracker: ProgressTracker
+    ):
+        """Test error handling and recovery."""
+        cmd = FetchCommand(command="fetch", chat="@testchat",
+            mode=FetchMode.RANGE,
+            from_date=date(2025, 1, 10),
+            to_date=date(2025, 1, 12),
+            strategy=FetchStrategy.BATCH,
+        )
+
+        progress_tracker.start_command(cmd)
+        dates = cmd.expand_dates()
+
+        # Process first date successfully
+        target_date = dates[0]
+        async with mock_client:
+            entity = await mock_client.get_entity(cmd.chat)
+            messages = []
+            async for message in mock_client.iter_messages(entity):
+                messages.append(message)
+
+        output_path = cmd.get_output_path(str(temp_dir), target_date)
+        output_file = Path(output_path)
+        output_file.parent.mkdir(parents=True, exist_ok=True)
+
+        with open(output_file, "w") as f:
+            json.dump({"date": target_date.isoformat()}, f)
+
+        progress_tracker.mark_date_processed(cmd.command_id, target_date)
+
+        # Simulate error on second date
+        progress_tracker.fail_command(cmd.command_id, "Network error")
+
+        # Verify partial progress
+        assert progress_tracker.is_date_processed(cmd.command_id, dates[0])
+        assert not progress_tracker.is_date_processed(cmd.command_id, dates[1])
+        assert not progress_tracker.is_date_processed(cmd.command_id, dates[2])
+
+        progress = progress_tracker.get_command_progress(cmd.command_id)
+        assert progress.status.value == "failed"
+        assert "Network error" in progress.error_message
+
+
+class TestE2EForceReprocess:
+    """Test end-to-end force reprocessing."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.e2e
+    async def test_force_reprocess_existing_data(
+        self, mock_client: MockTelethonClient, temp_dir: Path, progress_tracker: ProgressTracker
+    ):
+        """Test force flag allows reprocessing."""
+        # First fetch
+        cmd1 = FetchCommand(command="fetch", chat="@testchat",
+            mode=FetchMode.DATE,
+            date=date(2025, 1, 15),
+            strategy=FetchStrategy.BATCH,
+            force=False,
+        )
+
+        progress_tracker.start_command(cmd1)
+
+        async with mock_client:
+            entity = await mock_client.get_entity(cmd1.chat)
+            messages = []
+            async for message in mock_client.iter_messages(entity):
+                messages.append(message)
+
+        output_path = cmd1.get_output_path(str(temp_dir), cmd1.date)
+        output_file = Path(output_path)
+        output_file.parent.mkdir(parents=True, exist_ok=True)
+
+        with open(output_file, "w") as f:
+            json.dump({"version": 1}, f)
+
+        progress_tracker.mark_date_processed(cmd1.command_id, cmd1.date)
+        progress_tracker.complete_command(cmd1.command_id)
+
+        # Second fetch with force
+        cmd2 = FetchCommand(command="fetch", chat="@testchat",
+            mode=FetchMode.DATE,
+            date=date(2025, 1, 15),
+            strategy=FetchStrategy.BATCH,
+            force=True,
+        )
+
+        progress_tracker.start_command(cmd2)
+
+        # Force means we process even if already processed
+        assert not progress_tracker.is_date_processed(
+            cmd2.command_id, cmd2.date, force=True
+        )
+
+        # Reprocess
+        async with mock_client:
+            entity = await mock_client.get_entity(cmd2.chat)
+            messages = []
+            async for message in mock_client.iter_messages(entity):
+                messages.append(message)
+
+        with open(output_file, "w") as f:
+            json.dump({"version": 2, "reprocessed": True}, f)
+
+        progress_tracker.mark_date_processed(cmd2.command_id, cmd2.date)
+        progress_tracker.complete_command(cmd2.command_id)
+
+        # Verify file was rewritten
+        with open(output_file, "r") as f:
+            data = json.load(f)
+        assert data["version"] == 2
+        assert data["reprocessed"] is True
+
+
+class TestE2EPerformance:
+    """Test end-to-end performance characteristics."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.e2e
+    @pytest.mark.slow
+    async def test_large_date_range_performance(
+        self, mock_client: MockTelethonClient, temp_dir: Path, progress_tracker: ProgressTracker
+    ):
+        """Test fetching large date range."""
+        cmd = FetchCommand(command="fetch", chat="@testchat",
+            mode=FetchMode.DAYS,
+            days=30,
+            strategy=FetchStrategy.BATCH,
+        )
+
+        progress_tracker.start_command(cmd)
+        dates = cmd.expand_dates()
+        assert len(dates) == 30
+
+        start_time = asyncio.get_event_loop().time()
+
+        # Simulate batch processing
+        async with mock_client:
+            for target_date in dates:
+                if progress_tracker.is_date_processed(cmd.command_id, target_date):
+                    continue
+
+                # Minimal processing for performance test
+                output_path = cmd.get_output_path(str(temp_dir), target_date)
+                output_file = Path(output_path)
+                output_file.parent.mkdir(parents=True, exist_ok=True)
+
+                with open(output_file, "w") as f:
+                    json.dump({"date": target_date.isoformat()}, f)
+
+                progress_tracker.mark_date_processed(cmd.command_id, target_date)
+
+        progress_tracker.complete_command(cmd.command_id)
+        elapsed = asyncio.get_event_loop().time() - start_time
+
+        # Verify all processed
+        for target_date in dates:
+            assert progress_tracker.is_date_processed(cmd.command_id, target_date)
+
+        # Performance assertion (should be fast with mocks)
+        assert elapsed < 5.0  # Should complete in under 5 seconds
+
+    @pytest.mark.asyncio
+    @pytest.mark.e2e
+    async def test_concurrent_command_processing(
+        self, mock_client: MockTelethonClient, temp_dir: Path, progress_tracker: ProgressTracker
+    ):
+        """Test processing multiple commands concurrently."""
+        commands = [
+            FetchCommand(command="fetch", chat=f"@chat{i}",
+                mode=FetchMode.DATE,
+                date=date(2025, 1, 10 + i),
+                strategy=FetchStrategy.BATCH,
+            )
+            for i in range(5)
+        ]
+
+        async def process_command(cmd: FetchCommand):
+            progress_tracker.start_command(cmd)
+
+            async with mock_client:
+                entity = await mock_client.get_entity(cmd.chat)
+                messages = []
+                async for message in mock_client.iter_messages(entity):
+                    messages.append(message)
+
+            output_path = cmd.get_output_path(str(temp_dir), cmd.date)
+            output_file = Path(output_path)
+            output_file.parent.mkdir(parents=True, exist_ok=True)
+
+            with open(output_file, "w") as f:
+                json.dump({"chat": cmd.chat}, f)
+
+            progress_tracker.mark_date_processed(cmd.command_id, cmd.date)
+            progress_tracker.complete_command(cmd.command_id)
+
+        # Process concurrently
+        await asyncio.gather(*[process_command(cmd) for cmd in commands])
+
+        # Verify all completed
+        for cmd in commands:
+            assert progress_tracker.is_date_processed(cmd.command_id, cmd.date)
+            output_path = cmd.get_output_path(str(temp_dir), cmd.date)
+            assert Path(output_path).exists()

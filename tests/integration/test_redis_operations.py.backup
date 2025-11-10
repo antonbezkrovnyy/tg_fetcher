@@ -1,0 +1,405 @@
+"""Integration tests for Redis queue and PubSub operations.
+
+These tests require a running Redis instance.
+Use docker-compose up redis for local testing.
+"""
+
+import asyncio
+import json
+import pytest
+import pytest_asyncio
+from datetime import date
+from typing import AsyncGenerator
+import redis.asyncio as redis
+
+from src.models.command import FetchCommand, FetchMode, FetchStrategy
+
+
+@pytest_asyncio.fixture
+async def redis_client() -> AsyncGenerator[redis.Redis, None]:
+    """Provide Redis client for tests."""
+    client = redis.Redis(
+        host="localhost",
+        port=6379,
+        db=0,
+        decode_responses=True,
+    )
+    try:
+        # Test connection
+        await client.ping()
+        yield client
+    finally:
+        # Cleanup: Clear test keys
+        await client.delete("tg_commands")
+        await client.delete("tg_events")
+        await client.close()
+
+
+@pytest_asyncio.fixture
+async def redis_pubsub(redis_client: redis.Redis) -> AsyncGenerator[redis.client.PubSub, None]:
+    """Provide Redis PubSub for tests."""
+    pubsub = redis_client.pubsub()
+    try:
+        yield pubsub
+    finally:
+        await pubsub.close()
+
+
+class TestRedisCommandQueue:
+    """Test Redis BLPOP command queue operations."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.integration
+    async def test_push_and_pop_command(self, redis_client: redis.Redis):
+        """Test pushing and popping command from queue."""
+        cmd = FetchCommand(command="fetch", chat="@testchat",
+            mode=FetchMode.DATE,
+            date=date(2025, 1, 15),
+            strategy=FetchStrategy.BATCH,
+        )
+        command_json = cmd.model_dump_json()
+
+        # Push command
+        await redis_client.rpush("tg_commands", command_json)
+
+        # Pop command with BLPOP
+        result = await redis_client.blpop("tg_commands", timeout=1)
+        assert result is not None
+        queue_name, popped_json = result
+        assert queue_name == "tg_commands"
+
+        # Parse and validate
+        popped_cmd = FetchCommand.model_validate_json(popped_json)
+        assert popped_cmd.chat == cmd.chat
+        assert popped_cmd.mode == cmd.mode
+        assert popped_cmd.date == cmd.date
+
+    @pytest.mark.asyncio
+    @pytest.mark.integration
+    async def test_blpop_timeout(self, redis_client: redis.Redis):
+        """Test BLPOP returns None on timeout when queue is empty."""
+        result = await redis_client.blpop("tg_commands", timeout=1)
+        assert result is None
+
+    @pytest.mark.asyncio
+    @pytest.mark.integration
+    async def test_multiple_commands_fifo(self, redis_client: redis.Redis):
+        """Test commands are processed in FIFO order."""
+        commands = [
+            FetchCommand(command="fetch", chat=f"@chat{i}",
+                mode=FetchMode.DATE,
+                date=date(2025, 1, 10 + i),
+                strategy=FetchStrategy.BATCH,
+            )
+            for i in range(3)
+        ]
+
+        # Push all commands
+        for cmd in commands:
+            await redis_client.rpush("tg_commands", cmd.model_dump_json())
+
+        # Pop and verify order
+        for i, expected_cmd in enumerate(commands):
+            result = await redis_client.blpop("tg_commands", timeout=1)
+            assert result is not None
+            _, popped_json = result
+            popped_cmd = FetchCommand.model_validate_json(popped_json)
+            assert popped_cmd.chat == expected_cmd.chat
+
+    @pytest.mark.asyncio
+    @pytest.mark.integration
+    async def test_command_with_force_flag(self, redis_client: redis.Redis):
+        """Test command with force flag persists through queue."""
+        cmd = FetchCommand(command="fetch", chat="@testchat",
+            mode=FetchMode.DATE,
+            date=date(2025, 1, 15),
+            strategy=FetchStrategy.BATCH,
+            force=True,
+        )
+
+        await redis_client.rpush("tg_commands", cmd.model_dump_json())
+        result = await redis_client.blpop("tg_commands", timeout=1)
+        assert result is not None
+        _, popped_json = result
+        popped_cmd = FetchCommand.model_validate_json(popped_json)
+        assert popped_cmd.force is True
+
+    @pytest.mark.asyncio
+    @pytest.mark.integration
+    async def test_queue_length(self, redis_client: redis.Redis):
+        """Test checking queue length."""
+        # Start with empty queue
+        length = await redis_client.llen("tg_commands")
+        assert length == 0
+
+        # Add commands
+        for i in range(5):
+            cmd = FetchCommand(command="fetch", chat=f"@chat{i}",
+                mode=FetchMode.DATE,
+                date=date(2025, 1, 15),
+                strategy=FetchStrategy.BATCH,
+            )
+            await redis_client.rpush("tg_commands", cmd.model_dump_json())
+
+        # Check length
+        length = await redis_client.llen("tg_commands")
+        assert length == 5
+
+
+class TestRedisPubSub:
+    """Test Redis PubSub for event notifications."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.integration
+    async def test_publish_and_receive_event(
+        self, redis_client: redis.Redis, redis_pubsub: redis.client.PubSub
+    ):
+        """Test publishing and receiving event."""
+        await redis_pubsub.subscribe("tg_events")
+
+        # Give subscription time to establish
+        await asyncio.sleep(0.1)
+
+        # Publish event
+        event = {
+            "event": "fetch_started",
+            "chat": "@testchat",
+            "date": "2025-01-15",
+            "command_id": "test-cmd-id",
+        }
+        await redis_client.publish("tg_events", json.dumps(event))
+
+        # Receive event
+        message = await redis_pubsub.get_message(timeout=2.0)
+        if message and message["type"] == "subscribe":
+            # Skip subscription confirmation
+            message = await redis_pubsub.get_message(timeout=2.0)
+
+        assert message is not None
+        assert message["type"] == "message"
+        assert message["channel"] == "tg_events"
+
+        received_event = json.loads(message["data"])
+        assert received_event["event"] == "fetch_started"
+        assert received_event["chat"] == "@testchat"
+
+    @pytest.mark.asyncio
+    @pytest.mark.integration
+    async def test_multiple_events(
+        self, redis_client: redis.Redis, redis_pubsub: redis.client.PubSub
+    ):
+        """Test publishing multiple events."""
+        await redis_pubsub.subscribe("tg_events")
+        await asyncio.sleep(0.1)
+
+        events = [
+            {"event": "fetch_started", "command_id": "1"},
+            {"event": "fetch_completed", "command_id": "1"},
+            {"event": "fetch_started", "command_id": "2"},
+        ]
+
+        # Publish all events
+        for event in events:
+            await redis_client.publish("tg_events", json.dumps(event))
+
+        # Receive all events
+        received_events = []
+        # Skip subscription message
+        await redis_pubsub.get_message(timeout=1.0)
+
+        for _ in events:
+            message = await redis_pubsub.get_message(timeout=2.0)
+            assert message is not None
+            if message["type"] == "message":
+                received_events.append(json.loads(message["data"]))
+
+        assert len(received_events) == len(events)
+        assert received_events[0]["event"] == "fetch_started"
+        assert received_events[1]["event"] == "fetch_completed"
+
+    @pytest.mark.asyncio
+    @pytest.mark.integration
+    async def test_event_with_command_params(
+        self, redis_client: redis.Redis, redis_pubsub: redis.client.PubSub
+    ):
+        """Test event contains command parameters."""
+        await redis_pubsub.subscribe("tg_events")
+        await asyncio.sleep(0.1)
+
+        cmd = FetchCommand(command="fetch", chat="@testchat",
+            mode=FetchMode.DAYS,
+            days=7,
+            strategy=FetchStrategy.PER_DAY,
+        )
+
+        event = {
+            "event": "fetch_started",
+            **cmd.to_event_params(),
+        }
+
+        await redis_client.publish("tg_events", json.dumps(event))
+
+        # Skip subscription message
+        await redis_pubsub.get_message(timeout=1.0)
+        message = await redis_pubsub.get_message(timeout=2.0)
+
+        assert message is not None
+        received_event = json.loads(message["data"])
+        assert received_event["chat"] == "@testchat"
+        assert received_event["mode"] == "DAYS"
+        assert received_event["days"] == 7
+        assert received_event["strategy"] == "PER_DAY"
+
+
+class TestIdempotency:
+    """Test idempotent command processing with Redis."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.integration
+    async def test_duplicate_detection(self, redis_client: redis.Redis):
+        """Test detecting duplicate command processing."""
+        cmd = FetchCommand(command="fetch", chat="@testchat",
+            mode=FetchMode.DATE,
+            date=date(2025, 1, 15),
+            strategy=FetchStrategy.BATCH,
+        )
+
+        command_id = cmd.command_id
+        key = f"processed:{command_id}"
+
+        # First processing
+        exists = await redis_client.exists(key)
+        assert exists == 0
+
+        # Mark as processed
+        await redis_client.set(key, "1", ex=86400)  # 24 hour TTL
+
+        # Second attempt should detect duplicate
+        exists = await redis_client.exists(key)
+        assert exists == 1
+
+    @pytest.mark.asyncio
+    @pytest.mark.integration
+    async def test_force_bypasses_duplicate_check(self, redis_client: redis.Redis):
+        """Test force flag allows reprocessing."""
+        cmd_regular = FetchCommand(command="fetch", chat="@testchat",
+            mode=FetchMode.DATE,
+            date=date(2025, 1, 15),
+            strategy=FetchStrategy.BATCH,
+            force=False,
+        )
+        cmd_force = FetchCommand(command="fetch", chat="@testchat",
+            mode=FetchMode.DATE,
+            date=date(2025, 1, 15),
+            strategy=FetchStrategy.BATCH,
+            force=True,
+        )
+
+        # Mark as processed
+        key = f"processed:{cmd_regular.command_id}"
+        await redis_client.set(key, "1")
+
+        # Regular command should be blocked
+        if not cmd_regular.force:
+            exists = await redis_client.exists(key)
+            assert exists == 1
+
+        # Force command should proceed regardless
+        if cmd_force.force:
+            # Force means we process anyway, not checking Redis
+            pass
+
+    @pytest.mark.asyncio
+    @pytest.mark.integration
+    async def test_ttl_expiration(self, redis_client: redis.Redis):
+        """Test processed marker expires after TTL."""
+        cmd = FetchCommand(command="fetch", chat="@testchat",
+            mode=FetchMode.DATE,
+            date=date(2025, 1, 15),
+            strategy=FetchStrategy.BATCH,
+        )
+
+        key = f"processed:{cmd.command_id}"
+        await redis_client.set(key, "1", ex=1)  # 1 second TTL
+
+        # Immediately exists
+        exists = await redis_client.exists(key)
+        assert exists == 1
+
+        # Wait for expiration
+        await asyncio.sleep(1.5)
+
+        # Should be expired
+        exists = await redis_client.exists(key)
+        assert exists == 0
+
+
+class TestConcurrentOperations:
+    """Test concurrent Redis operations."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.integration
+    async def test_concurrent_command_processing(self, redis_client: redis.Redis):
+        """Test multiple workers processing commands concurrently."""
+        commands = [
+            FetchCommand(command="fetch", chat=f"@chat{i}",
+                mode=FetchMode.DATE,
+                date=date(2025, 1, 10 + i),
+                strategy=FetchStrategy.BATCH,
+            )
+            for i in range(10)
+        ]
+
+        # Push all commands
+        for cmd in commands:
+            await redis_client.rpush("tg_commands", cmd.model_dump_json())
+
+        # Simulate multiple workers
+        async def worker():
+            result = await redis_client.blpop("tg_commands", timeout=1)
+            if result:
+                _, cmd_json = result
+                return FetchCommand.model_validate_json(cmd_json)
+            return None
+
+        # Process concurrently
+        results = await asyncio.gather(*[worker() for _ in range(10)])
+
+        # All commands should be processed
+        processed = [r for r in results if r is not None]
+        assert len(processed) == 10
+
+        # No duplicates
+        chats = [r.chat for r in processed]
+        assert len(chats) == len(set(chats))
+
+    @pytest.mark.asyncio
+    @pytest.mark.integration
+    async def test_race_condition_on_duplicate_check(self, redis_client: redis.Redis):
+        """Test race condition handling in duplicate detection."""
+        cmd = FetchCommand(command="fetch", chat="@testchat",
+            mode=FetchMode.DATE,
+            date=date(2025, 1, 15),
+            strategy=FetchStrategy.BATCH,
+        )
+
+        key = f"processed:{cmd.command_id}"
+
+        # Simulate concurrent duplicate check and set
+        async def check_and_mark():
+            exists = await redis_client.exists(key)
+            if exists == 0:
+                # Simulate processing delay
+                await asyncio.sleep(0.01)
+                await redis_client.set(key, "1")
+                return True
+            return False
+
+        # Run concurrently
+        results = await asyncio.gather(*[check_and_mark() for _ in range(5)])
+
+        # With naive implementation, multiple might succeed
+        # With proper Redis atomic operations (SETNX), only one should succeed
+        # This test documents the race condition
+        successful = sum(results)
+        assert successful >= 1  # At least one succeeds
