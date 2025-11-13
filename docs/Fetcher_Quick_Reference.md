@@ -35,6 +35,35 @@
 - `date` — выгрузка за конкретную дату; требуется `fetch_date`
 - `range` — выгрузка за диапазон дат; требуется `fetch_start` и `fetch_end`
 
+## Минимальный запуск
+
+Windows PowerShell (локально, без Docker):
+
+```powershell
+# 1) Подготовить .env c обязательными полями
+Copy-Item .env.example .env
+notepad .env   # TELEGRAM_API_ID/TELEGRAM_API_HASH/TELEGRAM_PHONE/TELEGRAM_CHATS
+
+# 2) Запуск разовой выгрузки за вчера
+$env:FETCH_MODE="yesterday"; tg-fetch run
+
+# Альтернатива без консольного скрипта (если tg-fetch недоступен):
+# .venv\Scripts\python.exe -m src run
+
+# Пример выборочной даты по одному чату
+tg-fetch single @ru_python --date 2025-11-12
+```
+
+Docker (если используете compose из монорепозитория):
+
+```powershell
+# Старт демона-воркера (слушает Redis-очередь команд)
+docker compose up -d telegram-fetcher
+
+# Пример постановки команды (см. scripts/push_command.py)
+.venv\Scripts\python.exe scripts\push_command.py --chat @ru_python --date 2025-11-12
+```
+
 ## Настройки (1 строка на поле)
 
 Ниже — поля `FetcherConfig` (загружаются из `.env`/окружения), сгруппированные по смыслу.
