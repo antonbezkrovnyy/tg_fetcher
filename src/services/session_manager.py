@@ -6,6 +6,10 @@ from typing import Any, Optional
 from telethon import TelegramClient
 
 from src.observability.logging_config import get_logger
+from src.utils.retry import retry_async, maybe_record_rate_limit
+from src.core.config import FetcherConfig
+from src.core.circuit_breaker import CircuitBreaker, BreakerConfig
+from src.core.exceptions import BreakerOpenError
 
 logger = get_logger(__name__)
 
@@ -41,6 +45,8 @@ class SessionManager:
         # Remove + from phone for safe filename
         safe_phone = phone.replace("+", "")
         self._session_file = self.session_dir / f"session_{safe_phone}.session"
+        # Circuit breaker to prevent hot-looping on Telethon issues
+        self._breaker = CircuitBreaker(BreakerConfig(target="telethon", worker="session"))
 
     async def get_client(self) -> TelegramClient:
         """Get or create Telegram client.
@@ -49,9 +55,15 @@ class SessionManager:
             Connected TelegramClient instance
         """
         if self._client is None:
+            # Mask phone for logs to avoid PII leakage
+            masked_phone = (
+                self.phone[:3] + "***" + self.phone[-4:]
+                if len(self.phone) >= 7
+                else "***"
+            )
             logger.info(
                 "Creating Telegram client",
-                extra={"phone": self.phone, "session_file": str(self._session_file)},
+                extra={"phone": masked_phone, "session_file": str(self._session_file)},
             )
 
             # Create client with session file
@@ -61,21 +73,53 @@ class SessionManager:
                 self.api_hash,
             )
 
-            # Connect and authenticate
-            await self._client.connect()
+            # Connect and authenticate with retry
+            cfg = FetcherConfig()
+            try:
+                # Circuit breaker guard for connect
+                if not self._breaker.allow_call():
+                    raise BreakerOpenError("Circuit breaker is OPEN for telethon connect")
+                await retry_async(
+                    lambda: self._client.connect(),
+                    target="telethon_connect",
+                    max_attempts=cfg.max_retry_attempts,
+                    base=max(0.1, cfg.retry_backoff_factor / 4),
+                    max_seconds=max(1.0, cfg.retry_backoff_factor * 4),
+                )
+                self._breaker.record_success()
+            except Exception as e:
+                maybe_record_rate_limit(e, source="telethon_connect", chat=None, date=None)
+                # Count as breaker failure for non-rate-limit generic errors
+                self._breaker.record_failure(reason=type(e).__name__)
+                raise
 
             if not await self._client.is_user_authorized():
                 logger.info("User not authorized, starting auth process")
-                await self._client.send_code_request(self.phone)
+                # Retriable send_code_request (in case of transient errors)
+                try:
+                    if not self._breaker.allow_call():
+                        raise BreakerOpenError("Circuit breaker is OPEN for telethon send_code")
+                    await retry_async(
+                        lambda: self._client.send_code_request(self.phone),
+                        target="telethon_send_code",
+                        max_attempts=cfg.max_retry_attempts,
+                        base=max(0.1, cfg.retry_backoff_factor / 4),
+                        max_seconds=max(1.0, cfg.retry_backoff_factor * 4),
+                    )
+                    self._breaker.record_success()
+                except Exception as e:
+                    maybe_record_rate_limit(e, source="telethon_send_code", chat=None, date=None)
+                    self._breaker.record_failure(reason=type(e).__name__)
+                    raise
 
                 # In production, this would need to handle code input
                 # For MVP, assuming session already exists or manual intervention
                 logger.warning(
                     "Session not authorized. Please run auth setup first.",
-                    extra={"phone": self.phone},
+                    extra={"phone": masked_phone},
                 )
                 raise RuntimeError(
-                    f"Session for {self.phone} is not authorized. "
+                    f"Session for {masked_phone} is not authorized. "
                     "Please authorize the session first."
                 )
 

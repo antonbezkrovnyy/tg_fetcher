@@ -22,16 +22,17 @@ class MessageRepository:
     File structure: {data_dir}/{source_name}/{YYYY-MM-DD}.json
     """
 
-    SCHEMA_VERSION = "1.0"
-
-    def __init__(self, data_dir: Path):
+    def __init__(self, data_dir: Path, *, schema_version: str = "1.0"):
         """Initialize repository with data directory.
 
         Args:
             data_dir: Root directory for message storage
+            schema_version: Version string to record in saved MessageCollection
+                artifacts for downstream compatibility checks
         """
         self.data_dir = Path(data_dir)
         self.data_dir.mkdir(parents=True, exist_ok=True)
+        self._schema_version = schema_version
         logger.info(f"MessageRepository initialized with data_dir={self.data_dir}")
 
     def _get_file_path(self, source_name: str, target_date: date) -> Path:
@@ -53,9 +54,29 @@ class MessageRepository:
         filename = f"{target_date.isoformat()}.json"
         return source_dir / filename
 
+    # Public accessors for artifact paths (used by services for idempotent checks)
+    def get_output_file_path(self, source_name: str, target_date: date) -> Path:
+        """Return path to the primary JSON file for a chat/date.
+
+        Note: The file may not exist yet; callers should check .exists().
+        """
+        return self._get_file_path(source_name, target_date)
+
+    def get_summary_path(self, source_name: str, target_date: date) -> Path:
+        """Return path for the summary artifact for a chat/date."""
+        return self._get_artifact_path(source_name, target_date, "summary")
+
+    def get_threads_path(self, source_name: str, target_date: date) -> Path:
+        """Return path for the threads artifact for a chat/date."""
+        return self._get_artifact_path(source_name, target_date, "threads")
+
+    def get_participants_path(self, source_name: str, target_date: date) -> Path:
+        """Return path for the participants artifact for a chat/date."""
+        return self._get_artifact_path(source_name, target_date, "participants")
+
     def save_collection(
         self, source_name: str, target_date: date, collection: MessageCollection
-    ) -> None:
+    ) -> str:
         """Save message collection to JSON file atomically.
 
         Args:
@@ -86,6 +107,7 @@ class MessageRepository:
                     "file_path": str(file_path),
                 },
             )
+            return str(file_path)
         except Exception as e:
             logger.error(
                 f"Failed to save messages to {file_path}: {e}",
@@ -170,7 +192,7 @@ class MessageRepository:
             New MessageCollection instance
         """
         return MessageCollection(
-            version=self.SCHEMA_VERSION,
+            version=self._schema_version,
             source_info=source_info,
             senders={},
             messages=messages or [],
@@ -220,3 +242,92 @@ class MessageRepository:
         """
         collection = self.load_collection(source_name, target_date)
         return len(collection.messages) if collection else 0
+
+    # New helpers for additional artifacts
+    def _get_artifact_path(
+        self, source_name: str, target_date: date, suffix: str
+    ) -> Path:
+        clean_source = source_name.lstrip("@")
+        source_dir = self.data_dir / clean_source
+        source_dir.mkdir(parents=True, exist_ok=True)
+        filename = f"{target_date.isoformat()}_{suffix}.json"
+        return source_dir / filename
+
+    def save_summary(self, source_name: str, target_date: date, summary: dict) -> str:
+        """Persist a per-day summary artifact.
+
+        Args:
+            source_name: Chat/channel identifier
+            target_date: Date of messages
+            summary: Summary payload (checksum, counts, timestamps)
+
+        Returns:
+            Path string to written summary file
+        """
+        path = self._get_artifact_path(source_name, target_date, "summary")
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(summary, f, ensure_ascii=False, indent=2)
+        logger.info(
+            f"Saved summary to {path}",
+            extra={
+                "source": source_name,
+                "date": target_date.isoformat(),
+                "file_path": str(path),
+            },
+        )
+        return str(path)
+
+    def save_threads(self, source_name: str, target_date: date, threads: dict) -> str:
+        """Persist thread mapping artifact (reply structure) for the day.
+
+        Args:
+            source_name: Chat/channel identifier
+            target_date: Date of messages
+            threads: Mapping data (roots, parent_to_children, depth)
+
+        Returns:
+            Path string to written threads file
+        """
+        path = self._get_artifact_path(source_name, target_date, "threads")
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(threads, f, ensure_ascii=False, indent=2)
+        logger.info(
+            f"Saved threads to {path}",
+            extra={
+                "source": source_name,
+                "date": target_date.isoformat(),
+                "file_path": str(path),
+            },
+        )
+        return str(path)
+
+    def save_participants(
+        self, source_name: str, target_date: date, participants: dict[str, str]
+    ) -> str:
+        """Persist participants artifact for the day.
+
+        Args:
+            source_name: Chat/channel identifier
+            target_date: Date of messages
+            participants: Mapping sender_id -> display name
+
+        Returns:
+            Path string to written participants file
+        """
+        path = self._get_artifact_path(source_name, target_date, "participants")
+        artifact = {
+            "chat": source_name,
+            "date": target_date.isoformat(),
+            "participants": participants,
+        }
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(artifact, f, ensure_ascii=False, indent=2)
+        logger.info(
+            f"Saved participants to {path}",
+            extra={
+                "source": source_name,
+                "date": target_date.isoformat(),
+                "file_path": str(path),
+            },
+        )
+        return str(path)

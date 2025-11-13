@@ -1,0 +1,61 @@
+version: '3.8'
+
+services:
+  tg-loki:
+    image: grafana/loki:2.9.8
+    container_name: tg-loki
+    command: ["-config.file=/etc/loki/loki-config.yml"]
+    volumes:
+      - ../infrastructure/observability/config/loki/loki-config.yml:/etc/loki/loki-config.yml:ro
+    ports:
+      - "3100:3100"
+    networks:
+      - tg-infrastructure
+    restart: unless-stopped
+
+  tg-prometheus:
+    image: prom/prometheus:v2.53.0
+    container_name: tg-prometheus
+    command: ["--config.file=/etc/prometheus/prometheus.yml", "--storage.tsdb.path=/prometheus"]
+    volumes:
+      - ../infrastructure/observability/config/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prom-data:/prometheus
+    ports:
+      - "9090:9090"
+    networks:
+      - tg-infrastructure
+    restart: unless-stopped
+
+  tg-pushgateway:
+    image: prom/pushgateway:v1.8.0
+    container_name: tg-pushgateway
+    ports:
+      - "9091:9091"
+    networks:
+      - tg-infrastructure
+    restart: unless-stopped
+
+  tg-grafana:
+    image: grafana/grafana:11.2.0
+    container_name: tg-grafana
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_SECURITY_ADMIN_USER=admin
+    volumes:
+      - ../infrastructure/observability/config/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ../infrastructure/observability/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    networks:
+      - tg-infrastructure
+    restart: unless-stopped
+
+networks:
+  tg-infrastructure:
+    external: true
+    name: tg-infrastructure
+
+volumes:
+  prom-data:
+  grafana-data:

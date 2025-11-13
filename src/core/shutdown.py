@@ -8,6 +8,7 @@ import asyncio
 import logging
 import signal
 import sys
+from types import FrameType
 from typing import Optional
 
 logger = logging.getLogger(__name__)
@@ -16,7 +17,7 @@ logger = logging.getLogger(__name__)
 class ShutdownHandler:
     """Manages graceful shutdown for daemon processes."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize shutdown handler."""
         self._shutdown_event = asyncio.Event()
         self._shutdown_requested = False
@@ -43,7 +44,7 @@ class ShutdownHandler:
 
         self._signals_registered = True
 
-    def _signal_handler(self, signum: int, frame) -> None:
+    def _signal_handler(self, signum: int, frame: Optional[FrameType]) -> None:
         """Handle shutdown signals.
 
         Args:

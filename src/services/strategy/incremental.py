@@ -10,7 +10,7 @@ from datetime import date, datetime, timedelta
 from telethon import TelegramClient
 
 from src.observability.logging_config import get_logger
-from src.services.progress_tracker import ProgressTracker
+from src.services.progress_tracker import Progress, ProgressTracker
 from src.services.strategy.base import BaseFetchStrategy
 
 logger = get_logger(__name__)
@@ -45,7 +45,7 @@ class IncrementalStrategy(BaseFetchStrategy):
             Tuples of (start_date, end_date) for each chunk to process
         """
         # Get last processed date for this chat
-        progress = await self.progress_tracker.get_progress()
+        progress: Progress = self.progress_tracker.get_progress()
         source_progress = progress.sources.get(chat_identifier)
 
         if source_progress and source_progress.last_processed_date:

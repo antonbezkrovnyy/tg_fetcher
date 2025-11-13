@@ -4,9 +4,10 @@ Lightweight tests that verify critical paths without heavy mocking.
 For full E2E testing, use Docker integration tests with real Redis.
 """
 
-import pytest
 from datetime import date
 from pathlib import Path
+
+import pytest
 
 from src.models.command import FetchCommand, FetchMode, FetchStrategy
 

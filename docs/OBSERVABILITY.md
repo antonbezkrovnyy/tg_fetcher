@@ -28,8 +28,38 @@ docker-compose up -d telegram-fetcher
 
 If you don't have the external infrastructure available and you want a minimal local-only run, see the `docker/` directory for local docker-compose examples, or run the fetcher locally with metrics disabled (set `ENABLE_METRICS=false` in `.env`).
 
+Local override inside this repo (optional)
+
+We provide a convenience docker-compose file that runs a minimal observability stack on the external network `tg-infrastructure` so the fetcher can discover it by service names:
+
+- `docker-compose.observability.yml` (in the repo root)
+- Helper scripts:
+	- `scripts/observability_up.ps1` — ensures the `tg-infrastructure` network exists and brings the stack up
+	- `scripts/observability_down.ps1` — stops the stack (optionally removing volumes)
+
+Usage (Windows PowerShell):
+
+```powershell
+# From the python-tg repo root
+./scripts/observability_up.ps1            # start (add -Recreate to force a fresh start)
+# ... work with the app ...
+./scripts/observability_down.ps1          # stop (add -RemoveVolumes to clear data)
+```
+
+Endpoints (defaults):
+
+- Grafana: http://localhost:3000
+- Prometheus: http://localhost:9090
+- Loki: http://localhost:3100
+- Pushgateway: http://localhost:9091
+
+Notes:
+
+- The compose file mounts configuration from the adjacent workspace `infrastructure/observability/config/*` paths. Keep the standard workspace layout to avoid path issues.
+- The down script does not remove the external Docker network, because it may be shared by multiple services in this workspace.
+
 Troubleshooting
 - If logs indicate Loki cannot be reached, check the `LOKI_URL` environment variable in `.env` and ensure the observability containers are on the same Docker network as the fetcher.
 - For local quick debugging, set `LOG_FORMAT=text` to see plain logs in the container console.
 
-If you want, I can add a small helper `scripts/observability.ps1` that brings up the commonly used observability services from your workspace-level `infrastructure/` directory — say the word and I'll create it.
+Helper scripts are already provided as described above. If you need a Bash variant for non-Windows hosts, tell us and we'll add it.

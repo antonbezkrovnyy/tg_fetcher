@@ -1,15 +1,16 @@
 """Unit tests for retry utilities and backoff logic."""
 
 import asyncio
-import pytest
 from unittest.mock import AsyncMock, Mock, patch
+
+import pytest
 from telethon.errors import FloodWaitError
 
 from src.core.retry import (
-    retry_with_backoff,
-    handle_flood_wait,
-    safe_operation,
     RetryConfig,
+    handle_flood_wait,
+    retry_with_backoff,
+    safe_operation,
 )
 
 
@@ -253,9 +254,7 @@ class TestSafeOperation:
     async def test_combined_errors(self):
         """Test handling both FloodWait and retryable errors."""
         flood_error = FloodWaitError(request=None, capture=1)
-        operation = AsyncMock(
-            side_effect=[ValueError(), flood_error, "success"]
-        )
+        operation = AsyncMock(side_effect=[ValueError(), flood_error, "success"])
 
         with patch("asyncio.sleep", new_callable=AsyncMock):
             result = await safe_operation(
@@ -318,9 +317,7 @@ class TestEdgeCases:
         """Test single attempt with no retries."""
         operation = AsyncMock(side_effect=ValueError())
         with pytest.raises(ValueError):
-            await retry_with_backoff(
-                operation, max_attempts=1, retry_on=(ValueError,)
-            )
+            await retry_with_backoff(operation, max_attempts=1, retry_on=(ValueError,))
         operation.assert_awaited_once()
 
     @pytest.mark.asyncio
@@ -351,8 +348,12 @@ class TestEdgeCases:
         op2 = AsyncMock(side_effect=[ValueError(), "success2"])
 
         results = await asyncio.gather(
-            retry_with_backoff(op1, max_attempts=3, base_delay=0.01, retry_on=(ValueError,)),
-            retry_with_backoff(op2, max_attempts=3, base_delay=0.01, retry_on=(ValueError,)),
+            retry_with_backoff(
+                op1, max_attempts=3, base_delay=0.01, retry_on=(ValueError,)
+            ),
+            retry_with_backoff(
+                op2, max_attempts=3, base_delay=0.01, retry_on=(ValueError,)
+            ),
         )
 
         assert results == ["success1", "success2"]

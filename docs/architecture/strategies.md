@@ -29,7 +29,7 @@ strategy = ByDateStrategy("2025-11-07")
 ### 3. FullHistoryStrategy
 - **Режим**: `full`
 - **Описание**: Все сообщения от начала до вчера
-- **Особенности**: 
+- **Особенности**:
   - Разбивает на недельные чанки
   - Идет от новых к старым
   - Поддерживает возобновление
@@ -108,7 +108,7 @@ async def fetch_messages(strategy: BaseFetchStrategy):
 async def test_yesterday_strategy():
     strategy = YesterdayStrategy()
     yesterday = date.today() - timedelta(days=1)
-    
+
     ranges = [r async for r in strategy.get_date_ranges()]
     assert len(ranges) == 1
     assert ranges[0] == (yesterday, yesterday)
@@ -117,7 +117,7 @@ async def test_yesterday_strategy():
 async def test_full_history():
     strategy = FullHistoryStrategy()
     ranges = [r async for r in strategy.get_date_ranges()]
-    
+
     # Проверяем:
     # - Каждый диапазон <= 7 дней
     # - От новых к старым

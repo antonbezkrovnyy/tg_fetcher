@@ -82,6 +82,27 @@ class Message(BaseModel):
     comments: list["Message"] = Field(
         default_factory=list, description="Comments/replies in discussion thread"
     )
+    # Phase 1 enrichment fields (no backward compatibility needed)
+    token_count: Optional[int] = Field(
+        default=None,
+        ge=0,
+        description="Approximate token count estimate for budgeting",
+    )
+    normalized_links: list[str] = Field(
+        default_factory=list,
+        description=("List of canonical normalized links extracted from message text"),
+    )
+    # Phase 2 enrichment fields
+    message_type: Optional[str] = Field(
+        default=None,
+        description=(
+            "Heuristic label of message content: "
+            "question|answer|code|log|spam|service|other"
+        ),
+    )
+    lang: Optional[str] = Field(
+        default=None, description="Detected language code: ru|en|other"
+    )
 
     def get_reactions_dict(self) -> dict[str, int]:
         """Get reactions as emoji -> count dictionary.
@@ -139,6 +160,7 @@ class MessageCollection(BaseModel):
         json_schema_extra={
             "example": {
                 "version": "1.0",
+                "timezone": "UTC",
                 "source_info": {
                     "id": "@channel_username",
                     "title": "Channel Title",
@@ -153,6 +175,11 @@ class MessageCollection(BaseModel):
 
     version: str = Field(
         default="1.0", pattern=r"^\d+\.\d+$", description="Schema version"
+    )
+    timezone: str = Field(
+        default="UTC",
+        pattern=r"^[A-Za-z/_+-]+$",
+        description="Timezone of message timestamps (default UTC)",
     )
     source_info: SourceInfo = Field(..., description="Source metadata")
     senders: dict[str, str] = Field(

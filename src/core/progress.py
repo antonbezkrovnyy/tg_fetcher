@@ -57,7 +57,9 @@ class ProgressTracker:
         Args:
             progress_file: Path to progress JSON file (Path or str)
         """
-        self.progress_file = Path(progress_file) if isinstance(progress_file, str) else progress_file
+        self.progress_file = (
+            Path(progress_file) if isinstance(progress_file, str) else progress_file
+        )
         self._lock = threading.Lock()
         self._data: dict[str, CommandProgress] = {}
         self._load()
@@ -74,7 +76,7 @@ class ProgressTracker:
                     cmd_id: CommandProgress(**progress)
                     for cmd_id, progress in data.items()
                 }
-        except (json.JSONDecodeError, ValueError) as e:
+        except (json.JSONDecodeError, ValueError):
             # Corrupted file - backup and start fresh
             backup = self.progress_file.with_suffix(".json.backup")
             if self.progress_file.exists():
@@ -85,7 +87,9 @@ class ProgressTracker:
         """Persist progress to disk (caller must hold lock)."""
         self.progress_file.parent.mkdir(parents=True, exist_ok=True)
 
-        data = {cmd_id: progress.model_dump() for cmd_id, progress in self._data.items()}
+        data = {
+            cmd_id: progress.model_dump() for cmd_id, progress in self._data.items()
+        }
 
         # Atomic write with temp file
         temp_file = self.progress_file.with_suffix(".tmp")

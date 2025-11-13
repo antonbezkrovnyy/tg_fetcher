@@ -39,12 +39,12 @@ def ensure_correlation_id() -> str:
 
 class CorrelationContext:
     """Context manager for automatic correlation ID lifecycle."""
-    
+
     def __enter__(self) -> str:
         correlation_id = generate_correlation_id()
         set_correlation_id(correlation_id)
         return correlation_id
-    
+
     def __exit__(self, exc_type, exc_val, exc_tb):
         _correlation_id.set(None)
         return False
@@ -66,7 +66,7 @@ with CorrelationContext() as correlation_id:
 ```python
 class TelegramError(Exception):
     """Base exception for Telegram-related errors."""
-    
+
     def __init__(self, message: str, correlation_id: str | None = None):
         self.message = message
         self.correlation_id = correlation_id or get_correlation_id()
@@ -116,10 +116,10 @@ class DataValidationError(TelegramError):
 async def _handle_fetch_command(self, command_data: dict) -> None:
     with CorrelationContext() as correlation_id:
         start_time = datetime.utcnow()
-        
+
         try:
             # ... fetch logic ...
-            
+
             duration = (datetime.utcnow() - start_time).total_seconds()
             self.logger.info(
                 "Fetch completed successfully",
@@ -133,7 +133,7 @@ async def _handle_fetch_command(self, command_data: dict) -> None:
                     "status": "success",
                 },
             )
-            
+
         except TelegramAuthError as e:
             duration = (datetime.utcnow() - start_time).total_seconds()
             self.logger.error(
@@ -164,9 +164,9 @@ async def _handle_fetch_command(self, command_data: dict) -> None:
 async def _process_date_range(...) -> int:
     correlation_id = get_correlation_id()
     start_time = datetime.utcnow()
-    
+
     # ... processing ...
-    
+
     duration = (datetime.utcnow() - start_time).total_seconds()
     logger.info(
         "Date range fetch completed",
@@ -180,7 +180,7 @@ async def _process_date_range(...) -> int:
             "status": "success",
         },
     )
-    
+
     return messages_fetched  # FIXED: теперь возвращает количество
 ```
 
@@ -191,10 +191,10 @@ async def _process_date_range(...) -> int:
 ```python
 async def _handle_command(self, command_json: str) -> None:
     start_time = datetime.utcnow()
-    
+
     try:
         # ... command handling ...
-        
+
         duration = (datetime.utcnow() - start_time).total_seconds()
         self.logger.info(
             "Command executed successfully",
@@ -206,7 +206,7 @@ async def _handle_command(self, command_json: str) -> None:
                 "status": "success",
             },
         )
-        
+
     except json.JSONDecodeError as e:
         self.logger.error(
             "Failed to parse command JSON",
@@ -227,7 +227,7 @@ async def _handle_command(self, command_json: str) -> None:
 ```python
 def publish_fetch_complete(self, chat, date, message_count, file_path, duration_seconds):
     correlation_id = get_correlation_id()
-    
+
     event = {
         "event": "messages_fetched",
         "chat": chat,
@@ -239,10 +239,10 @@ def publish_fetch_complete(self, chat, date, message_count, file_path, duration_
         "service": "tg_fetcher",
         "correlation_id": correlation_id,  # NEW
     }
-    
+
     try:
         subscribers = self._redis_client.publish(self.EVENTS_CHANNEL, json.dumps(event))
-        
+
         logger.info(
             "Event published successfully",
             extra={
@@ -397,7 +397,7 @@ docker exec -it tg-redis redis-cli RPUSH tg_commands \
 1. **Prometheus Histograms:**
    ```python
    from prometheus_client import Histogram
-   
+
    fetch_duration = Histogram(
        'telegram_fetch_duration_seconds',
        'Time to fetch messages',
@@ -418,6 +418,6 @@ docker exec -it tg-redis redis-cli RPUSH tg_commands \
 
 ---
 
-**Status:** ✅ **COMPLETE**  
-**Observability:** **5/10 → 8/10**  
+**Status:** ✅ **COMPLETE**
+**Observability:** **5/10 → 8/10**
 **Date:** 2025-11-09

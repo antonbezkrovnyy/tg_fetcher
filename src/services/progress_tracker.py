@@ -51,13 +51,16 @@ class ProgressTracker:
     Uses progress.json file to persist state between runs.
     """
 
-    def __init__(self, progress_file: Path):
+    def __init__(self, progress_file: Path, *, schema_version: str = "1.0"):
         """Initialize progress tracker.
 
         Args:
             progress_file: Path to progress.json file
+            schema_version: Version string to record in newly created
+                progress files to ensure compatibility when loading later
         """
         self.progress_file = Path(progress_file)
+        self._schema_version = schema_version
         self.progress: Progress = self._load()
         logger.info(
             f"ProgressTracker initialized with {len(self.progress.sources)} sources",
@@ -72,7 +75,7 @@ class ProgressTracker:
         """
         if not self.progress_file.exists():
             logger.info("No existing progress file, starting fresh")
-            return Progress()
+            return Progress(version=self._schema_version)
 
         try:
             with open(self.progress_file, "r", encoding="utf-8") as f:
@@ -85,7 +88,7 @@ class ProgressTracker:
             return progress
         except Exception as e:
             logger.error(f"Failed to load progress file: {e}, starting fresh")
-            return Progress()
+            return Progress(version=self._schema_version)
 
     def _save(self) -> None:
         """Save progress to file atomically."""
@@ -231,3 +234,11 @@ class ProgressTracker:
             SourceProgress or None if not found
         """
         return self.progress.sources.get(source)
+
+    def get_progress(self) -> Progress:
+        """Return full progress model.
+
+        Returns:
+            Progress object containing all source progress entries.
+        """
+        return self.progress

@@ -24,7 +24,7 @@ import time
 from datetime import datetime, timedelta, timezone
 from typing import List
 
-import redis  # type: ignore
+import redis
 
 COMMANDS_QUEUE = "tg_commands"
 
@@ -66,12 +66,20 @@ def _create_fetch_command(chat: str, date_str: str) -> dict:
 
 
 def main() -> int:
+    """Run daily scheduler loop.
+
+    Connects to Redis and enqueues a daily fetch command for configured chats
+    at the specified time. Optionally enqueues once on startup.
+
+    Returns:
+        Process exit code (0 on normal termination, 1 on connection error)
+    """
     redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
     redis_password = os.getenv("REDIS_PASSWORD") or None
     chats_env = os.getenv("FETCH_SCHEDULE_CHATS", "ru_python")
     schedule_time = os.getenv("SCHEDULE_TIME", "02:00")
     timezone_name = (os.getenv("TIMEZONE") or "UTC").upper()
-    run_on_start = (os.getenv("RUN_ON_START", "false").lower() == "true")
+    run_on_start = os.getenv("RUN_ON_START", "false").lower() == "true"
 
     chats: List[str] = [c.strip() for c in chats_env.split(",") if c.strip()]
     use_utc = timezone_name == "UTC"

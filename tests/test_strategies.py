@@ -1,7 +1,7 @@
 """Tests for fetch strategy implementations."""
 
 from datetime import date, datetime, timedelta
-from unittest.mock import AsyncMock, MagicMock, Mock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 from telethon import TelegramClient
@@ -136,9 +136,9 @@ class TestIncrementalStrategy:
 
     @pytest.fixture
     def mock_progress_tracker(self):
-        """Create mock ProgressTracker with configurable response."""
-        tracker = AsyncMock(spec=ProgressTracker)
-        tracker.get_progress = AsyncMock()  # Add the method explicitly
+        """Create mock ProgressTracker with configurable response (sync)."""
+        tracker = Mock(spec=ProgressTracker)
+        tracker.get_progress = Mock()
         return tracker
 
     async def test_get_date_ranges_with_progress(self, mock_progress_tracker):
@@ -194,7 +194,7 @@ class TestIncrementalStrategy:
         ranges = [r async for r in strategy.get_date_ranges(client, chat)]
         assert len(ranges) == 0  # Should yield nothing for invalid date
 
-    def test_get_strategy_name(self):
+    async def test_get_strategy_name(self):
         """Should return 'incremental'."""
         strategy = IncrementalStrategy(MagicMock(spec=ProgressTracker))
         assert strategy.get_strategy_name() == "incremental"

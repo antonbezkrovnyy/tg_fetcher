@@ -1,0 +1,10 @@
+[run]
+source = src
+omit =
+    src/main.py
+    src/daemon.py
+    src/core/shutdown.py
+    src/observability/logging_config.py
+
+[report]
+show_missing = True

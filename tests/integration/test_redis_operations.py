@@ -1,48 +1,63 @@
 """Integration tests for Redis queue and PubSub operations.
 
 Optimized: Only critical paths tested.
-These tests require a running Redis instance: docker-compose up redis
+Now uses Testcontainers for an isolated Redis instance (no localhost dependency).
 """
 
 import asyncio
 import json
-import pytest
-import pytest_asyncio
 from datetime import date
 from typing import AsyncGenerator
+
+import pytest
+import pytest_asyncio
 import redis.asyncio as redis
 
 from src.models.command import FetchCommand, FetchMode, FetchStrategy
 
 
-@pytest_asyncio.fixture
-async def redis_client() -> AsyncGenerator[redis.Redis, None]:
-    """Provide Redis client for tests."""
-    client = redis.Redis(
-        host="localhost",
-        port=6379,
-        db=0,
-        decode_responses=True,
-    )
+@pytest.fixture(scope="module")
+def _redis_container():
+    testcontainers = pytest.importorskip("testcontainers.redis")
+    from testcontainers.redis import RedisContainer  # type: ignore
+
     try:
-        # Test connection
+        with RedisContainer("redis:7.2.4") as container:  # pinned for stability
+            host = container.get_container_host_ip()
+            port = int(container.get_exposed_port(6379))
+            url = f"redis://{host}:{port}"
+            yield {"host": host, "port": port, "url": url}
+    except Exception as e:  # pragma: no cover - infra dependent
+        pytest.skip(f"Docker is required for RedisContainer: {e}")
+
+
+@pytest_asyncio.fixture
+async def redis_client(_redis_container) -> AsyncGenerator[redis.Redis, None]:
+    """Provide Redis client connected to a containerized Redis."""
+    client = redis.from_url(_redis_container["url"], decode_responses=True)
+    try:
         await client.ping()
-        yield client
-    finally:
-        # Cleanup: Clear test keys
+        # Ensure test keys are clean
         await client.delete("tg_commands")
         await client.delete("tg_events")
-        await client.close()
+        yield client
+    finally:
+        # Cleanup: Clear test keys and close
+        await client.delete("tg_commands")
+        await client.delete("tg_events")
+        await client.aclose()
 
 
 @pytest_asyncio.fixture
-async def redis_pubsub(redis_client: redis.Redis) -> AsyncGenerator[redis.client.PubSub, None]:
+async def redis_pubsub(
+    redis_client: redis.Redis,
+) -> AsyncGenerator[redis.client.PubSub, None]:
     """Provide Redis PubSub for tests."""
     pubsub = redis_client.pubsub()
     try:
         yield pubsub
     finally:
-        await pubsub.close()
+        await pubsub.aclose()
 
 
 class TestRedisCommandQueue:
@@ -127,7 +142,10 @@ class TestRedisPubSub:
         await redis_client.publish(channel, json.dumps(event_data))
 
         # Receive event (with timeout)
-        message = await asyncio.wait_for(redis_pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0), timeout=2.0)
+        message = await asyncio.wait_for(
+            redis_pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0),
+            timeout=2.0,
+        )
 
         assert message is not None
         assert message["type"] == "message"

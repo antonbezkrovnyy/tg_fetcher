@@ -5,16 +5,17 @@ Full test suite available in .backup file if needed.
 """
 
 import json
-import pytest
+import shutil
+import tempfile
+import threading
+import time
 from datetime import date
 from pathlib import Path
 from typing import Generator
-import tempfile
-import shutil
-import threading
-import time
 
-from src.core.progress import ProgressTracker, CommandProgress
+import pytest
+
+from src.core.progress import CommandProgress, ProgressTracker
 from src.models.command import FetchCommand, FetchMode, FetchStrategy
 
 
@@ -39,9 +40,7 @@ class TestProgressTracking:
     """Test progress tracking - critical operations only."""
 
     @pytest.mark.integration
-    def test_start_and_complete_command(
-        self, progress_tracker: ProgressTracker
-    ):
+    def test_start_and_complete_command(self, progress_tracker: ProgressTracker):
         """Test basic command lifecycle (most common flow)."""
         cmd = FetchCommand(
             command="fetch",
@@ -93,9 +92,7 @@ class TestProgressTracking:
             mode=cmd.mode.value,
             params=cmd.to_event_params(),
         )
-        tracker1.mark_date_processed(
-            cmd.command_id, date(2025, 1, 15), "output.json"
-        )
+        tracker1.mark_date_processed(cmd.command_id, date(2025, 1, 15), "output.json")
 
         # Simulate restart - create new instance
         tracker2 = ProgressTracker(str(progress_file))
@@ -133,7 +130,9 @@ class TestProgressTracking:
             )
             progress_tracker.complete_command(cmd.command_id)
 
-        threads = [threading.Thread(target=start_and_complete, args=(cmd,)) for cmd in commands]
+        threads = [
+            threading.Thread(target=start_and_complete, args=(cmd,)) for cmd in commands
+        ]
 
         for t in threads:
             t.start()

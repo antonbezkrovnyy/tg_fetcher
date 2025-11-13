@@ -88,6 +88,14 @@ class FetcherConfig(BaseSettings):
         default=3, ge=1, le=10, description="Maximum channels to process in parallel"
     )
 
+    # === Per-Chat Concurrency ===
+    fetch_concurrency_per_chat: int = Field(
+        default=3,
+        ge=1,
+        le=20,
+        description="Maximum parallel date ranges per chat",
+    )
+
     # === Retry Settings ===
     max_retry_attempts: int = Field(
         default=3,
@@ -113,6 +121,76 @@ class FetcherConfig(BaseSettings):
         description="Force re-fetching even if data already exists (ignores progress)",
     )
 
+    # === Progress Events ===
+    enable_progress_events: bool = Field(
+        default=True, description="Enable Redis progress events publishing"
+    )
+    # === Final/Stage Events ===
+    enable_events: bool = Field(
+        default=True,
+        description=("Enable publishing of start/complete/failed/skipped/stage events"),
+    )
+    progress_interval: int = Field(
+        default=100,
+        ge=1,
+        le=10000,
+        description="Publish progress event every N processed messages",
+    )
+
+    # === Preprocessing Feature Flags ===
+    link_normalize_enabled: bool = Field(
+        default=True,
+        description="Enable URL extraction and normalization for messages",
+    )
+    token_estimate_enabled: bool = Field(
+        default=True,
+        description="Enable token count estimation for messages",
+    )
+    merge_short_messages_enabled: bool = Field(
+        default=True,
+        description=(
+            "Enable merging of consecutive short messages from the same sender"
+        ),
+    )
+    merge_short_messages_max_length: int = Field(
+        default=120,
+        ge=10,
+        le=1000,
+        description="Maximum length of a message to qualify for merge",
+    )
+    merge_short_messages_max_gap_seconds: int = Field(
+        default=90,
+        ge=5,
+        le=3600,
+        description="Maximum time gap in seconds between messages to allow merge",
+    )
+    message_classifier_enabled: bool = Field(
+        default=True, description="Enable rule-based message_type classification"
+    )
+    language_detect_enabled: bool = Field(
+        default=True, description="Enable lightweight language detection (ru/en/other)"
+    )
+
+    # === Deduplication ===
+    dedup_in_run_enabled: bool = Field(
+        default=False,
+        description=(
+            "Enable deduplication within a single run (skip duplicate message IDs encountered"
+            " in the same execution). Cross-run idempotency via last_processed_id always applies."
+        ),
+    )
+
+    # === Telegram Discussions / Comments ===
+    comments_limit_per_message: int = Field(
+        default=50,
+        ge=0,
+        le=1000,
+        description=(
+            "Max number of discussion comments to fetch per channel post; "
+            "0 disables comments fetching"
+        ),
+    )
+
     # === Logging ===
     log_level: str = Field(
         default="INFO",
@@ -132,12 +210,27 @@ class FetcherConfig(BaseSettings):
     metrics_port: int = Field(
         default=9090, ge=1024, le=65535, description="Port for metrics HTTP server"
     )
+    metrics_mode: str = Field(
+        default="scrape",
+        pattern=r"^(scrape|push|both)$",
+        description="How to expose metrics: scrape via HTTP, push to Pushgateway, or both",
+    )
     loki_url: Optional[str] = Field(
         default=None, description="Loki URL for log shipping (e.g., http://loki:3100)"
     )
     pushgateway_url: Optional[str] = Field(
         default=None,
         description="Prometheus Pushgateway URL (e.g., http://pushgateway:9091)",
+    )
+
+    # === Events Bus (Redis Pub/Sub) ===
+    events_channel: str = Field(
+        default="tg_events",
+        description="Redis Pub/Sub channel name for fetcher events",
+    )
+    service_name: str = Field(
+        default="tg_fetcher",
+        description="Service name to include in emitted events/metrics",
     )
 
     # === Redis (for PubSub and queue) ===
@@ -147,6 +240,44 @@ class FetcherConfig(BaseSettings):
     )
     redis_password: Optional[str] = Field(
         default=None, description="Redis password (if required)"
+    )
+
+    # === Redis Commands Queue (BLPOP) ===
+    commands_queue: str = Field(
+        default="tg_commands", description="Redis list name for commands queue"
+    )
+    commands_blpop_timeout: int = Field(
+        default=5,
+        ge=1,
+        le=3600,
+        description="Default BLPOP timeout in seconds for command subscriber",
+    )
+
+    # === Schema / Versioning ===
+    data_schema_version: str = Field(
+        default="1.0", description="Version string for stored data schema"
+    )
+    progress_schema_version: str = Field(
+        default="1.0", description="Version string for progress file schema"
+    )
+    preprocessing_version: str = Field(
+        default="1", description="Preprocessing pipeline version label"
+    )
+
+    # === Storage Backend ===
+    storage_backend: str = Field(
+        default="fs",
+        pattern=r"^(fs|mongo)$",
+        description="Storage backend to use for message persistence: fs or mongo",
+    )
+    mongo_url: Optional[str] = Field(
+        default=None, description="MongoDB connection string (e.g., mongodb://localhost:27017)"
+    )
+    mongo_db: Optional[str] = Field(
+        default=None, description="MongoDB database name for message storage"
+    )
+    mongo_collection: Optional[str] = Field(
+        default=None, description="MongoDB collection name for messages"
     )
 
     @field_validator("fetch_date", "fetch_start", "fetch_end", mode="before")

@@ -5,11 +5,13 @@ Supports horizontal scaling - multiple workers can run simultaneously.
 """
 
 import asyncio
+import contextlib
 import os
+import random
 import signal
 import sys
-from datetime import datetime, timedelta
-from typing import Any, Dict
+from datetime import datetime, timedelta, timezone
+from typing import Any, Awaitable, Callable
 
 from pydantic import ValidationError
 
@@ -21,10 +23,19 @@ from src.core.exceptions import (
     TelegramAuthError,
 )
 from src.observability.logging_config import get_logger, setup_logging
+from src.observability.metrics import (
+    ensure_metrics_server,
+    fetch_duration_seconds,
+    fetch_errors_total,
+    fetch_messages_total,
+    fetch_retries_total,
+    floodwait_wait_seconds,
+)
 from src.services.command_subscriber import CommandSubscriber
 from src.services.event_publisher import EventPublisher
 from src.services.fetcher_service import FetcherService
-from src.utils.correlation import CorrelationContext, ensure_correlation_id
+from src.utils.correlation import CorrelationContext
+from src.core.retry import safe_operation
 
 
 class FetcherDaemon:
@@ -58,6 +69,10 @@ class FetcherDaemon:
             },
         )
 
+        # Setup metrics server (non-blocking) if enabled
+        if self.config.enable_metrics:
+            ensure_metrics_server(self.config.metrics_port)
+
         # Setup Redis connections
         try:
             # Command subscriber (queue pattern - fair distribution)
@@ -73,6 +88,7 @@ class FetcherDaemon:
             self.event_publisher = EventPublisher(
                 redis_url=self.config.redis_url,
                 redis_password=self.config.redis_password,
+                enabled=self.config.enable_events,
             )
             self.event_publisher.connect()
 
@@ -121,10 +137,15 @@ class FetcherDaemon:
             signum: Signal number
             frame: Current stack frame
         """
-        self.logger.info(f"Received signal {signum}, initiating graceful shutdown...")
+        self.logger.info(
+            "Received shutdown signal; initiating graceful shutdown...",
+            extra={"signum": signum},
+        )
         self.running = False
 
-    async def _handle_fetch_command(self, command: Dict[str, Any]) -> None:
+    async def _handle_fetch_command(
+        self, command: dict[str, Any]
+    ) -> None:  # noqa: C901,E501
         """Handle fetch command from Redis with full tracing and error handling.
 
         Args:
@@ -167,13 +188,13 @@ class FetcherDaemon:
                 },
             )
 
-            start_time = datetime.utcnow()
+            start_time = datetime.now(timezone.utc)
 
             try:
-                # Execute fetch for each requested day
+                # Execute fetch for each requested day with retry/backoff wrapper
                 for day_offset in range(days_back):
                     fetch_date = (
-                        datetime.utcnow() - timedelta(days=day_offset)
+                        datetime.now(timezone.utc) - timedelta(days=day_offset)
                     ).strftime("%Y-%m-%d")
 
                     self.logger.info(
@@ -194,13 +215,32 @@ class FetcherDaemon:
                         fetch_config.fetch_date = date_str
                     service = FetcherService(fetch_config)
 
-                    # Fetch with the specified date or calculated fetch_date
+                    # Fetch with retry/backoff
                     actual_date = date_str if date_str else fetch_date
-                    result = await service.fetch_single_chat(chat, actual_date)
+
+                    async def _op(
+                        service: FetcherService = service,
+                        actual_date: str = actual_date,
+                    ) -> dict[str, Any]:
+                        return await service.fetch_single_chat(chat, actual_date)
+
+                    result = await self._run_with_retries(
+                        _op,
+                        chat=chat,
+                        date=actual_date,
+                        correlation_id=correlation_id,
+                    )
 
                     if result and self.event_publisher:
                         # Publish success event
-                        duration = (datetime.utcnow() - start_time).total_seconds()
+                        duration = (
+                            datetime.now(timezone.utc) - start_time
+                        ).total_seconds()
+                        # Metrics
+                        with contextlib.suppress(Exception):
+                            fetch_duration_seconds.labels(
+                                chat=chat, date=actual_date, worker=self.worker_id
+                            ).observe(duration)
 
                         self.event_publisher.publish_fetch_complete(
                             chat=chat,
@@ -208,6 +248,15 @@ class FetcherDaemon:
                             message_count=result.get("message_count", 0),
                             file_path=result.get("file_path", ""),
                             duration_seconds=duration,
+                            checksum_sha256=result.get("checksum_sha256"),
+                            estimated_tokens_total=result.get("estimated_tokens_total"),
+                            first_message_ts=result.get("first_message_ts"),
+                            last_message_ts=result.get("last_message_ts"),
+                            schema_version="1",
+                            preprocessing_version="1",
+                            summary_file_path=result.get("summary_file_path"),
+                            threads_file_path=result.get("threads_file_path"),
+                            participants_file_path=result.get("participants_file_path"),
                         )
 
                         self.logger.info(
@@ -227,7 +276,7 @@ class FetcherDaemon:
 
             except TelegramAuthError as e:
                 # Auth errors - don't retry
-                duration = (datetime.utcnow() - start_time).total_seconds()
+                duration = (datetime.now(timezone.utc) - start_time).total_seconds()
                 self.logger.error(
                     "Telegram authentication failed",
                     extra={
@@ -251,8 +300,9 @@ class FetcherDaemon:
                     )
 
             except FloodWaitError as e:
-                # Rate limit - log and wait
-                duration = (datetime.utcnow() - start_time).total_seconds()
+                # Rate limit - log and wait (already handled inside
+                # retry loop if raised there)
+                duration = (datetime.now(timezone.utc) - start_time).total_seconds()
                 self.logger.warning(
                     "Telegram rate limit hit",
                     extra={
@@ -266,8 +316,6 @@ class FetcherDaemon:
                     },
                 )
 
-                # Should implement retry with backoff here
-                # For now, just publish failure event
                 if self.event_publisher:
                     self.event_publisher.publish_fetch_failed(
                         chat=chat,
@@ -278,7 +326,7 @@ class FetcherDaemon:
 
             except NetworkError as e:
                 # Network errors - can retry
-                duration = (datetime.utcnow() - start_time).total_seconds()
+                duration = (datetime.now(timezone.utc) - start_time).total_seconds()
                 self.logger.error(
                     "Network error during fetch",
                     extra={
@@ -349,6 +397,108 @@ class FetcherDaemon:
                         error=f"{type(e).__name__}: {str(e)}",
                         duration_seconds=duration,
                     )
+
+    async def _run_with_retries(  # noqa: C901
+        self,
+        op: Callable[[], Awaitable[dict[str, Any]]],
+        chat: str,
+        date: str,
+        correlation_id: str,
+    ) -> dict[str, Any]:
+        """Execute async operation using unified retry helper with hooks for metrics/logging."""
+        retried_flag = {"value": False}
+
+        def on_retry(attempt: int, delay: float, exc: BaseException) -> None:
+            # Count retry by reason and mark that success will be "after retry"
+            retried_flag["value"] = True
+            reason = type(exc).__name__.lower()
+            try:
+                fetch_retries_total.labels(
+                    chat=chat, date=date, reason=reason, worker=self.worker_id
+                ).inc()
+            except Exception:
+                pass
+            self.logger.warning(
+                "Retrying operation",
+                extra={
+                    "correlation_id": correlation_id,
+                    "chat": chat,
+                    "date": date,
+                    "attempt": attempt,
+                    "sleep_seconds": round(delay, 2),
+                    "worker_id": self.worker_id,
+                    "error_type": reason,
+                },
+            )
+
+        def on_flood(wait_seconds: int, sleep_for: int) -> None:
+            # Observe floodwait and increment retries counter
+            try:
+                floodwait_wait_seconds.labels(
+                    chat=chat, date=date, worker=self.worker_id
+                ).observe(wait_seconds)
+                fetch_retries_total.labels(
+                    chat=chat, date=date, reason="floodwait", worker=self.worker_id
+                ).inc()
+            except Exception:
+                pass
+            self.logger.warning(
+                "FloodWait encountered, sleeping",
+                extra={
+                    "correlation_id": correlation_id,
+                    "chat": chat,
+                    "date": date,
+                    "wait_seconds": wait_seconds,
+                    "sleep_seconds": sleep_for,
+                    "worker_id": self.worker_id,
+                    "error_type": "floodwait",
+                },
+            )
+
+        try:
+            result = await safe_operation(
+                op,
+                max_attempts=self.config.max_retry_attempts,
+                base_delay=max(0.1, self.config.retry_backoff_factor / 4),
+                exponential_base=2.0,
+                max_delay=max(1.0, self.config.retry_backoff_factor * 4),
+                jitter=True,
+                retry_on=(NetworkError,),
+                max_flood_wait=600,
+                operation_name="fetch_single_chat",
+                on_retry=on_retry,
+                on_flood=on_flood,
+            )
+        except ChatNotFoundError:
+            fetch_errors_total.labels(
+                chat=chat, date=date, error_type="chat_not_found", worker=self.worker_id
+            ).inc()
+            raise
+        except TelegramAuthError:
+            fetch_errors_total.labels(
+                chat=chat, date=date, error_type="auth_error", worker=self.worker_id
+            ).inc()
+            raise
+        except Exception as e:
+            # Unknown error
+            fetch_errors_total.labels(
+                chat=chat, date=date, error_type=type(e).__name__, worker=self.worker_id
+            ).inc()
+            raise
+
+        # On success, record messages and if there were retries, a synthetic success_after_retry
+        try:
+            fetch_messages_total.labels(
+                chat=chat, date=date, worker=self.worker_id
+            ).inc(result.get("message_count", 0))
+            if retried_flag["value"]:
+                fetch_retries_total.labels(
+                    chat=chat, date=date, reason="success_after_retry", worker=self.worker_id
+                ).inc()
+        except Exception:
+            pass
+
+        return result
 
 
 async def main() -> int:

@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 from enum import Enum
 from typing import Any, Optional
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class FetchMode(str, Enum):
@@ -109,7 +109,7 @@ class FetchCommand(BaseModel):
         # Don't add @ to numeric IDs or negative IDs
         if v and not v.startswith("@") and not v.startswith("http"):
             # Check if it's a numeric ID (possibly negative)
-            if v.lstrip('-').isdigit():
+            if v.lstrip("-").isdigit():
                 return v
             return f"@{v}"
         return v
@@ -179,17 +179,18 @@ class FetchCommand(BaseModel):
             params["date"] = self.date.isoformat()
         elif self.mode == FetchMode.DAYS and self.days:
             params["days"] = self.days
-        elif self.mode == FetchMode.RANGE:
-            if self.from_date and self.to_date:
-                params["from"] = self.from_date.isoformat()
-                params["to"] = self.to_date.isoformat()
+        elif (
+            self.mode == FetchMode.RANGE
+            and self.from_date is not None
+            and self.to_date is not None
+        ):
+            params["from"] = self.from_date.isoformat()
+            params["to"] = self.to_date.isoformat()
 
         if self.limit:
             params["limit"] = self.limit
 
         return params
 
-    class Config:
-        """Pydantic configuration."""
-
-        populate_by_name = True  # Allow both 'from' and 'from_date'
+    # Pydantic v2 config
+    model_config = ConfigDict(populate_by_name=True)

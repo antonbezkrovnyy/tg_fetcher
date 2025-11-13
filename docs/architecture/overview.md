@@ -9,7 +9,7 @@ graph TD
     Fetcher --> Storage[JSON Storage]
     Fetcher --> Progress[Progress Tracker]
     Fetcher --> Monitoring[Observability Stack]
-    
+
     subgraph Observability
         Monitoring --> Prometheus[Prometheus]
         Monitoring --> Loki[Loki]

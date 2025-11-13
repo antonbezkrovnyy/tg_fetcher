@@ -96,10 +96,10 @@ tests/integration/
 ```python
 class RateLimiter:
     """Rate limiting с поддержкой ротации credentials."""
-    
+
     async def acquire(self) -> bool:
         """Проверка можно ли делать запрос."""
-    
+
     async def rotate_credentials(self) -> None:
         """Переключение на другие credentials."""
 ```
@@ -108,7 +108,7 @@ class RateLimiter:
 ```python
 class CredentialsManager:
     """Управление пулом credentials."""
-    
+
     async def get_next(self) -> Credentials:
         """Получить следующие рабочие credentials."""
 ```

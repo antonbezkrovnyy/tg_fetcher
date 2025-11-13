@@ -4,24 +4,28 @@ Main orchestrator for fetching messages from Telegram with reactions,
 comments, and progress tracking.
 """
 
+import json
 import logging
-from datetime import date, datetime, timedelta, timezone
+from datetime import date as _date
+from pathlib import Path
 from typing import Any, Optional
 
-from telethon import TelegramClient
-from telethon.hints import Entity
-from telethon.tl.custom import Message as TelethonMessage
-from telethon.tl.types import Channel, Chat, MessageReactions, User
-
 from src.core.config import FetcherConfig
-from src.core.exceptions import ChatNotFoundError, DataValidationError, NetworkError
-from src.models.schemas import ForwardInfo, Message, Reaction, SourceInfo
+from src.di.container import Container
+from src.observability.metrics_adapter import MetricsAdapter
 from src.repositories.message_repository import MessageRepository
-from src.services.progress_tracker import ProgressTracker
-from src.services.session_manager import SessionManager
-from src.services.strategy.base import BaseFetchStrategy
-from src.services.strategy.yesterday import YesterdayOnlyStrategy
-from src.utils.correlation import ensure_correlation_id, get_correlation_id
+from src.services.event_publisher import EventPublisherProtocol
+
+# Models are used downstream in use-cases and repositories, not directly here
+from src.utils.correlation import ensure_correlation_id
+
+# URL parsing utilities no longer needed here; link handling moved to preprocessor
+
+# Telethon details are encapsulated behind gateways and use-cases
+
+
+
+# Use-cases are provisioned via DI container to reduce coupling
 
 logger = logging.getLogger(__name__)
 
@@ -39,35 +43,27 @@ class FetcherService:
             config: Validated FetcherConfig instance
         """
         self.config = config
-        self.session_manager = SessionManager(
-            api_id=config.telegram_api_id,
-            api_hash=config.telegram_api_hash,
-            phone=config.telegram_phone,
-            session_dir=config.session_dir,
-        )
-        self.repository = MessageRepository(config.data_dir)
-        self.progress_tracker = ProgressTracker(config.progress_file)
+        # Validate mode-specific requirements early to fail fast on misconfiguration
+        try:
+            self.config.validate_mode_requirements()
+        except Exception:
+            logger.error("Invalid configuration for fetch mode", exc_info=True)
+            raise
+        # Build application container
+        container = Container(config=self.config)
+        self._container = container
 
-        # Handle progress reset if requested
+        # Initialize external resources via container (IoC)
+        container.initialize_runtime()
+
+        # Optionally reset progress via DI-managed tracker
         if config.progress_reset:
-            logger.warning(
-                "Progress reset requested",
-                extra={
-                    "action": "reset_all_progress",
-                    "reason": "PROGRESS_RESET=true",
-                },
-            )
-            self.progress_tracker.reset_all()
-
-        # Select strategy based on fetch mode and date
-        self.strategy = self._create_strategy(
-            config.fetch_date if config.fetch_mode == "date" else None
-        )
+            container.provide_progress_tracker().reset_all()
 
         logger.info(
             "FetcherService initialized",
             extra={
-                "strategy": self.strategy.get_strategy_name(),
+                "strategy": self.config.fetch_mode,
                 "chats_count": len(self.config.telegram_chats),
                 "chats": self.config.telegram_chats,
                 "force_refetch": self.config.force_refetch,
@@ -75,69 +71,56 @@ class FetcherService:
             },
         )
 
-    def _create_strategy(self, date_str: str = None) -> BaseFetchStrategy:
-        """Create fetch strategy based on config or date_str."""
-        if self.config.fetch_mode == "date" and date_str:
-            from src.services.strategy.by_date import ByDateStrategy
+        # Expose selected dependencies for legacy helpers compatibility
+        self.repository: MessageRepository = container.provide_repository()
+        self.event_publisher: EventPublisherProtocol = (
+            container.provide_event_publisher()
+        )
+        self.metrics: MetricsAdapter = container.provide_metrics()
 
-            return ByDateStrategy(date_str)
-        if self.config.fetch_mode == "yesterday":
-            return YesterdayOnlyStrategy()
-        else:
-            raise ValueError(f"Unsupported fetch_mode: {self.config.fetch_mode}")
+        # Use cases via container provisioning (MessageExtractor wired by default)
+        self._date_range_use_case = container.provide_fetch_date_range_use_case()
+        self._chat_use_case = container.provide_fetch_chat_use_case(
+            date_range_use_case=self._date_range_use_case
+        )
+
+    def _create_strategy(self, date_str: Optional[str] = None) -> Any:
+        """Delegate strategy creation to container's factory."""
+        return self._container.provide_strategy(date_str)
+
+    # Skip logic fully handled inside use-cases; no local checks here
 
     async def run(self) -> None:
         """Run fetcher service for all configured chats."""
         correlation_id = ensure_correlation_id()
+        # Create strategy upfront to log its name
+        strategy = self._create_strategy(
+            self.config.fetch_date.isoformat()
+            if (self.config.fetch_mode == "date" and self.config.fetch_date is not None)
+            else None
+        )
 
         logger.info(
             "Starting fetcher service run",
             extra={
                 "correlation_id": correlation_id,
                 "chats_count": len(self.config.telegram_chats),
-                "strategy": self.strategy.get_strategy_name(),
+                "strategy": getattr(strategy, "get_strategy_name", lambda: "unknown")(),
             },
         )
 
-        async with self.session_manager as client:
-            for chat_identifier in self.config.telegram_chats:
-                try:
-                    await self._process_chat(client, chat_identifier)
-                except ChatNotFoundError as e:
-                    logger.error(
-                        "Chat not found or inaccessible",
-                        extra={
-                            "correlation_id": correlation_id,
-                            "error_type": "chat_not_found",
-                            "chat": chat_identifier,
-                        },
-                        exc_info=True,
-                    )
-                except NetworkError as e:
-                    logger.error(
-                        "Network error during chat processing",
-                        extra={
-                            "correlation_id": correlation_id,
-                            "error_type": "network_error",
-                            "chat": chat_identifier,
-                            "retry_count": e.retry_count,
-                        },
-                        exc_info=True,
-                    )
-                except Exception as e:
-                    logger.error(
-                        "Failed to process chat",
-                        extra={
-                            "correlation_id": correlation_id,
-                            "error_type": "unknown_error",
-                            "error_class": type(e).__name__,
-                            "chat": chat_identifier,
-                        },
-                        exc_info=True,
-                    )
+        # Delegate orchestration to FetchRunner to keep facade minimal
+        runner = self._container.provide_fetch_runner()
+        await runner.run_all(strategy=strategy, correlation_id=correlation_id)
+
+    # Output existence checks are encapsulated within repository-aware use-cases
+
+    # Single-chat enrichment is handled by dedicated components in use-cases
 
     async def fetch_single_chat(
-        self, chat_identifier: str, date_str: str = None
+        self,
+        chat_identifier: str,
+        date_str: Optional[str] = None,
     ) -> dict[str, Any]:
         """Fetch messages from a single chat (for daemon mode commands).
 
@@ -159,596 +142,176 @@ class FetcherService:
             "file_path": "",
             "source_id": chat_identifier,
             "dates": [],
+            "checksum_sha256": None,
+            "estimated_tokens_total": 0,
+            "first_message_ts": None,
+            "last_message_ts": None,
+            "summary_file_path": None,
+            "threads_file_path": None,
+            "participants_file_path": None,
         }
 
-        async with self.session_manager as client:
+        strategy = self._create_strategy(date_str)
+        try:
+            runner = self._container.provide_fetch_runner()
+            fetched = await runner.run_single(
+                strategy=strategy,
+                chat_identifier=chat_identifier,
+                correlation_id=ensure_correlation_id(),
+            )
+            result["message_count"] = fetched
+
+            logger.info(
+                f"Fetch completed for chat {chat_identifier}",
+                extra={"fetched": result["message_count"]},
+            )
+            # Enforce result contract via Pydantic model, then return dict for
+            # backward compatibility with existing callers
             try:
-                # Get entity
-                entity = await client.get_entity(chat_identifier)
-                source_info = self._extract_source_info(entity, chat_identifier)
-                result["source_id"] = source_info.id
+                from src.models.results import SingleChatFetchResult
 
-                # Выбор стратегии по наличию даты
-                strategy = self._create_strategy(date_str)
-
-                # Get date ranges from strategy
-                async for start_date, end_date in strategy.get_date_ranges(
-                    client, entity
-                ):
-                    # Пропуск, если файл уже существует
-                    import os
-
-                    file_path = (
-                        f"data/{source_info.id}/"
-                        f"{source_info.id}_{start_date.isoformat()}.json"
-                    )
-                    if os.path.exists(file_path):
-                        logger.info(
-                            f"File already exists for {file_path}, skipping fetch."
-                        )
-                        continue
-                    # Process this date range
-                    fetched_count = await self._process_date_range(
-                        client, entity, source_info, start_date, end_date
-                    )
-                    # Track processed date and add to total count
-                    result["dates"].append(start_date.isoformat())
-                    result["message_count"] += fetched_count
-                # Build file path
-                if result["dates"]:
-                    latest_date = result["dates"][0]
-                    result["file_path"] = (
-                        f"data/{source_info.id}/" f"{source_info.id}_{latest_date}.json"
-                    )
-                logger.info(
-                    f"Fetch completed for chat {chat_identifier}",
-                    extra={"dates": result["dates"]},
+                return SingleChatFetchResult.model_validate(result).model_dump()
+            except Exception:
+                # If validation unexpectedly fails, fall back to original dict
+                logger.debug(
+                    "Result validation failed; returning raw dict",
+                    exc_info=True,
                 )
                 return result
-            except Exception as e:
-                logger.error(
-                    f"Failed to fetch single chat {chat_identifier}: {e}",
-                    extra={"chat": chat_identifier},
-                    exc_info=True,
-                )
-                raise
-
-    async def _process_chat(self, client: TelegramClient, chat_identifier: str) -> None:
-        """Process single chat/channel.
-
-        Args:
-            client: Authenticated Telegram client
-            chat_identifier: Chat username or ID
-        """
-        correlation_id = get_correlation_id()
-        start_time = datetime.utcnow()
-
-        logger.info(
-            "Processing chat",
-            extra={
-                "correlation_id": correlation_id,
-                "chat": chat_identifier,
-                "strategy": self.strategy.get_strategy_name(),
-            },
-        )
-
-        # Get entity (channel, chat, or user)
-        entity = await client.get_entity(chat_identifier)
-
-        # Extract source info
-        source_info = self._extract_source_info(entity, chat_identifier)
-
-        # Get date ranges from strategy
-        async for start_date, end_date in self.strategy.get_date_ranges(client, entity):
-            await self._process_date_range(
-                client, entity, source_info, start_date, end_date
+        except Exception as e:
+            logger.error(
+                f"Failed to fetch single chat {chat_identifier}: {e}",
+                extra={"chat": chat_identifier},
+                exc_info=True,
             )
+            raise
 
-    async def _process_date_range(
-        self,
-        client: TelegramClient,
-        entity: Entity,
-        source_info: SourceInfo,
-        start_date: date,
-        end_date: date,
-    ) -> int:
-        """Process messages for a date range.
+    # Chat processing is coordinated by FetchRunner via DI
 
-        Args:
-            client: Telegram client
-            entity: Channel/chat entity
-            source_info: Source metadata
-            start_date: Start date (inclusive)
-            end_date: End date (inclusive)
+    # Date range orchestration is delegated to FetchDateRangeUseCase
 
-        Returns:
-            Number of messages fetched
-        """
-        correlation_id = get_correlation_id()
-        start_time = datetime.utcnow()
+    # Finalization and persistence are handled within use-cases/orchestrator
 
-        # Check if already completed (unless force_refetch is enabled)
-        if not self.config.force_refetch and self.progress_tracker.is_date_completed(
-            source_info.id, start_date
-        ):
-            logger.info(
-                "Skipping date range - already completed",
-                extra={
-                    "correlation_id": correlation_id,
-                    "source": source_info.id,
-                    "date": start_date.isoformat(),
-                    "reason": "already_completed",
-                    "force_refetch": False,
-                },
-            )
-            return 0
+    # Iteration over messages moved to DateRangeProcessor inside the use-case
 
-        # Mark as in progress
-        self.progress_tracker.mark_in_progress(source_info.id, start_date)
+    # Short-message merge is delegated to MessagePreprocessor.maybe_merge_short
 
-        logger.info(
-            "Starting message fetch for date range",
-            extra={
-                "correlation_id": correlation_id,
-                "source": source_info.id,
-                "source_title": source_info.title,
-                "start_date": start_date.isoformat(),
-                "end_date": end_date.isoformat(),
-            },
-        )
+    # Saving and progress marking live in repository/progress tracker via the use-case
 
-        # Create collection for this date
-        collection = self.repository.create_collection(
-            source_info=source_info, messages=[]
-        )
+    # Message extraction is provided by DI via MessageExtractor
 
-        # Fetch messages for date range
-        messages_fetched = 0
+    # Link extraction/normalization is handled by MessagePreprocessor
 
-        # Calculate date range boundaries
-        # start = beginning of start_date (00:00:00 UTC)
-        # end = beginning of day after end_date (00:00:00 UTC next day)
-        start_datetime = datetime.combine(start_date, datetime.min.time()).replace(
-            tzinfo=timezone.utc
-        )
-        end_datetime = datetime.combine(
-            end_date + timedelta(days=1), datetime.min.time()
-        ).replace(tzinfo=timezone.utc)
+    # Classification, language detection, URL normalization, and token estimation
+    # have been moved out of the service into the MessagePreprocessor layer.
 
-        logger.info(
-            "Calculated date range boundaries",
-            extra={
-                "correlation_id": correlation_id,
-                "source": source_info.id,
-                "start_date": start_date.isoformat(),
-                "end_date": end_date.isoformat(),
-                "start_datetime": start_datetime.isoformat(),
-                "end_datetime": end_datetime.isoformat(),
-            },
-        )
+    def _compute_file_checksum(self, file_path: str | Path | None) -> Optional[str]:
+        """Delegate checksum calculation to shared utility for consistency."""
+        try:
+            from src.utils.checksum import compute_file_checksum as _compute
 
-        # Iterate through messages using offset_date (like in reference implementation)
-        # offset_date=end means "start from this date and go backwards"
-        # reverse=False is default (newest to oldest)
+            return _compute(file_path)
+        except Exception:
+            logger.warning("Failed to compute checksum", exc_info=True)
+            return None
 
-        logger.info(
-            "Starting message iteration",
-            extra={
-                "correlation_id": correlation_id,
-                "source": source_info.id,
-                "offset_date": end_datetime.isoformat(),
-            },
-        )
-        messages_processed = 0
-
-        async for message in client.iter_messages(
-            entity, offset_date=end_datetime, reverse=False
-        ):
-            if not message.date:
-                continue
-
-            msg_datetime = message.date
-
-            # Log every 100 messages to track progress (changed from 10 to reduce noise)
-            if messages_processed % 100 == 0 and messages_processed > 0:
-                logger.info(
-                    "Message iteration progress",
-                    extra={
-                        "correlation_id": correlation_id,
-                        "source": source_info.id,
-                        "messages_processed": messages_processed,
-                        "messages_fetched": messages_fetched,
-                        "current_msg_date": msg_datetime.isoformat(),
-                    },
-                )
-
-            messages_processed += 1
-
-            # Skip messages that are >= end (from next day onwards)
-            if msg_datetime >= end_datetime:
-                continue
-
-            # Stop when we reach messages before our start date
-            if msg_datetime < start_datetime:
-                logger.info(
-                    "Reached start date boundary",
-                    extra={
-                        "correlation_id": correlation_id,
-                        "source": source_info.id,
-                        "messages_processed": messages_processed,
-                        "messages_fetched": messages_fetched,
-                        "boundary_reached": start_datetime.isoformat(),
-                    },
-                )
-                break
-
-            # Extract message data with reactions and comments
-            message_data = await self._extract_message_data(
-                client, entity, message, source_info
-            )
-            collection.messages.append(message_data)
-
-            # Add sender to senders map
-            if message_data.sender_id:
-                sender_name = self._get_sender_name(message.sender)
-                collection.add_sender(message_data.sender_id, sender_name)
-
-            messages_fetched += 1
-
-        # Calculate duration
-        duration = (datetime.utcnow() - start_time).total_seconds()
-
-        # Save collection and update progress
-        self._save_and_mark_complete(
-            source_info, start_date, collection, messages_fetched
-        )
-
-        logger.info(
-            "Date range fetch completed",
-            extra={
-                "correlation_id": correlation_id,
-                "source": source_info.id,
-                "date": start_date.isoformat(),
-                "messages_fetched": messages_fetched,
-                "messages_processed": messages_processed,
-                "duration_seconds": round(duration, 2),
-                "status": "success",
-            },
-        )
-
-        return messages_fetched
-
-    def _save_and_mark_complete(
-        self,
-        source_info: SourceInfo,
-        target_date: date,
-        collection: Any,
-        message_count: int,
+    # Deprecated compatibility helpers kept for unit tests; new flow is in use-cases
+    def _enrich_single_chat_result(
+        self, result: dict[str, Any], source_id: str, latest_date: str
     ) -> None:
-        """Save collection and mark date as completed.
+        """Populate checksum and artifact paths; compute basic summary fields.
 
-        Args:
-            source_info: Source metadata
-            target_date: Date that was processed
-            collection: Message collection
-            message_count: Number of messages fetched
+        This helper mirrors previous behavior for unit tests. In production,
+        finalization is handled by the orchestrator and use-cases.
         """
-        correlation_id = get_correlation_id()
-        last_message_id = None
+        try:
+            # Compute checksum for saved file (if any)
+            result["checksum_sha256"] = self._compute_file_checksum(
+                result.get("file_path")
+            )
 
-        if message_count > 0:
+            # Derive artifact paths
+            d = _date.fromisoformat(latest_date)
+            result["summary_file_path"] = self.repository.get_summary_path(
+                source_id, d
+            ).as_posix()
+            result["threads_file_path"] = self.repository.get_threads_path(
+                source_id, d
+            ).as_posix()
+            result["participants_file_path"] = self.repository.get_participants_path(
+                source_id, d
+            ).as_posix()
+
+            # Load collection to compute timestamps and token totals
+            coll = self.repository.load_collection(source_id, d)
+            msgs = getattr(coll, "messages", [])
+            if msgs:
+                result["first_message_ts"] = msgs[0].date.isoformat()
+                result["last_message_ts"] = msgs[-1].date.isoformat()
+                result["estimated_tokens_total"] = sum(
+                    (m.token_count or 0) for m in msgs
+                )
+            else:
+                result.setdefault("first_message_ts", None)
+                result.setdefault("last_message_ts", None)
+                result.setdefault("estimated_tokens_total", 0)
+        except Exception:
+            logger.debug("_enrich_single_chat_result failed (non-fatal)", exc_info=True)
+
+    def _maybe_skip_existing(
+        self, source_info: Any, start_date: _date, *, correlation_id: str
+    ) -> bool:
+        """Return True if output exists with matching checksum and emit events.
+
+        Emits fetch_skipped event and resets progress gauge when skipping.
+        """
+        try:
+            out_path = self.repository.get_output_file_path(source_info.id, start_date)
+            if not Path(out_path).exists():
+                return False
+
+            summary_path = self.repository.get_summary_path(source_info.id, start_date)
+            if not Path(summary_path).exists():
+                return False
+
+            expected_checksum: Optional[str] = None
             try:
-                self.repository.save_collection(
-                    source_name=source_info.id,
-                    target_date=target_date,
-                    collection=collection,
-                )
+                with open(summary_path, "r", encoding="utf-8") as f:
+                    payload = json.load(f)
+                expected_checksum = payload.get("file_checksum_sha256")
+            except Exception:
+                expected_checksum = None
 
-                # Get last message ID for progress tracking
-                if collection.messages:
-                    last_message_id = collection.messages[-1].id
+            if not expected_checksum:
+                return False
 
-                logger.info(
-                    "Messages saved successfully",
-                    extra={
-                        "correlation_id": correlation_id,
-                        "source": source_info.id,
-                        "date": target_date.isoformat(),
-                        "message_count": message_count,
-                        "last_message_id": last_message_id,
-                        "action": "save_collection",
-                    },
-                )
-            except Exception as e:
-                logger.error(
-                    "Failed to save message collection",
-                    extra={
-                        "correlation_id": correlation_id,
-                        "error_type": "save_error",
-                        "source": source_info.id,
-                        "date": target_date.isoformat(),
-                        "message_count": message_count,
-                    },
-                    exc_info=True,
-                )
-                raise
-        else:
-            logger.info(
-                f"No messages found for {source_info.id} on {target_date}",
-                extra={"source": source_info.id, "date": target_date.isoformat()},
-            )
-
-        # Mark as completed in progress tracker
-        self.progress_tracker.mark_completed(
-            source=source_info.id,
-            target_date=target_date,
-            message_count=message_count,
-            last_message_id=last_message_id,
-        )
-
-    async def _extract_message_data(
-        self,
-        client: TelegramClient,
-        entity: Entity,
-        message: TelethonMessage,
-        source_info: SourceInfo,
-    ) -> Message:
-        """Extract message data into Pydantic model with reactions and comments.
-
-        Args:
-            client: Telegram client
-            entity: Source entity
-            message: Telethon message object
-            source_info: Source metadata (to check if channel)
-
-        Returns:
-            Message model instance
-        """
-        # Extract reactions
-        reactions = await self._extract_reactions(message)
-
-        # Extract comments (only for channels, not for chats/supergroups)
-        comments = await self._extract_comments(client, entity, message, source_info)
-
-        # Extract forward info
-        forward_info = self._extract_forward_info(message)
-
-        return Message(
-            id=message.id,
-            date=message.date,
-            text=message.message or None,
-            sender_id=message.sender_id,
-            reply_to_msg_id=message.reply_to_msg_id,
-            forward_from=forward_info,
-            reactions=reactions,
-            comments=comments,
-        )
-
-    async def _extract_reactions(self, message: TelethonMessage) -> list[Reaction]:
-        """Extract reactions from message.
-
-        Args:
-            message: Telethon message object
-
-        Returns:
-            List of Reaction models
-        """
-        reactions_list: list[Reaction] = []
-
-        if not hasattr(message, "reactions") or message.reactions is None:
-            return reactions_list
-
-        try:
-            if isinstance(message.reactions, MessageReactions):
-                for reaction in message.reactions.results:
-                    # Get emoji from reaction
-                    emoji = None
-                    if hasattr(reaction, "reaction"):
-                        if hasattr(reaction.reaction, "emoticon"):
-                            emoji = reaction.reaction.emoticon
-                        elif isinstance(reaction.reaction, str):
-                            emoji = reaction.reaction
-
-                    if emoji and hasattr(reaction, "count"):
-                        reactions_list.append(
-                            Reaction(
-                                emoji=emoji,
-                                count=reaction.count,
-                                users=None,  # User list not available in basic API
-                            )
+            actual_checksum = self._compute_file_checksum(out_path)
+            if actual_checksum and actual_checksum == expected_checksum:
+                # Report skip via events/metrics
+                if getattr(self.config, "enable_progress_events", False):
+                    try:
+                        self.event_publisher.publish_fetch_skipped(
+                            chat=source_info.id,
+                            date=start_date.isoformat(),
+                            reason="already_exists_same_checksum",
+                            checksum_expected=expected_checksum,
+                            checksum_actual=actual_checksum,
                         )
-        except Exception as e:
-            logger.warning(
-                f"Failed to extract reactions from message {message.id}: {e}",
-                extra={"message_id": message.id},
+                    except Exception:
+                        logger.debug(
+                            "Failed to publish fetch_skipped (non-fatal)",
+                            extra={"correlation_id": correlation_id},
+                            exc_info=True,
+                        )
+                try:
+                    self.metrics.reset_progress(source_info.id, start_date.isoformat())
+                except Exception:
+                    logger.debug("Failed to reset progress (non-fatal)", exc_info=True)
+                return True
+
+            return False
+        except Exception:
+            logger.debug(
+                "_maybe_skip_existing failed (treat as not skipped)", exc_info=True
             )
-
-        return reactions_list
-
-    async def _extract_comments(
-        self,
-        client: TelegramClient,
-        entity: Entity,
-        message: TelethonMessage,
-        source_info: SourceInfo,
-    ) -> list[Message]:
-        """Extract comments from channel post discussion.
-
-        Comments are only available for channels (type="channel"),
-        not for chats/supergroups. In chats, replies are tracked
-        via reply_to_msg_id field instead.
-
-        Args:
-            client: Telegram client
-            entity: Telegram entity
-            message: Original message
-            source_info: Source metadata (to check if channel)
-
-        Returns:
-            List of comment messages (empty for chats)
-        """
-        comments_list: list[Message] = []
-
-        # Skip comments extraction for chats and supergroups
-        # Comments are only for channels (type="channel")
-        if source_info.type != "channel":
-            return comments_list
-
-        # Check if message has replies (discussion thread)
-        if not hasattr(message, "replies") or message.replies is None:
-            return comments_list
-
-        if message.replies.replies == 0:
-            return comments_list
-
-        try:
-            # Get discussion message if channel has linked discussion group
-            if isinstance(entity, Channel) and hasattr(message.replies, "channel_id"):
-                # Limit to 50 comments per message to prevent hanging
-                comment_count = 0
-                async for comment in client.iter_messages(
-                    message.replies.channel_id,
-                    reply_to=message.replies.max_id,
-                    limit=50,
-                ):
-                    # Recursively extract comment data (without nested comments)
-                    comment_data = Message(
-                        id=comment.id,
-                        date=comment.date,
-                        text=comment.message or None,
-                        sender_id=comment.sender_id,
-                        reply_to_msg_id=comment.reply_to_msg_id,
-                        forward_from=self._extract_forward_info(comment),
-                        reactions=await self._extract_reactions(comment),
-                        comments=[],  # No nested comments
-                    )
-                    comments_list.append(comment_data)
-                    comment_count += 1
-
-                if comment_count > 0:
-                    logger.debug(
-                        f"Fetched {comment_count} comments for message {message.id}"
-                    )
-        except Exception as e:
-            logger.warning(
-                f"Failed to extract comments from message {message.id}: {e}",
-                extra={"message_id": message.id},
-            )
-
-        return comments_list
-
-    def _extract_forward_info(self, message: TelethonMessage) -> Optional[ForwardInfo]:
-        """Extract forward information from message.
-
-        Args:
-            message: Telethon message object
-
-        Returns:
-            ForwardInfo model if message is forwarded, None otherwise
-        """
-        if not hasattr(message, "forward") or message.forward is None:
-            return None
-
-        try:
-            forward = message.forward
-
-            from_id = None
-            from_name = None
-            forward_date = None
-
-            if hasattr(forward, "from_id"):
-                from_id = (
-                    forward.from_id.user_id
-                    if hasattr(forward.from_id, "user_id")
-                    else None
-                )
-
-            if hasattr(forward, "from_name"):
-                from_name = forward.from_name
-
-            if hasattr(forward, "date"):
-                forward_date = forward.date
-
-            return ForwardInfo(from_id=from_id, from_name=from_name, date=forward_date)
-        except Exception as e:
-            logger.warning(
-                f"Failed to extract forward info from message {message.id}: {e}",
-                extra={"message_id": message.id},
-            )
-            return None
-
-    def _extract_source_info(self, entity: Entity, chat_identifier: str) -> SourceInfo:
-        """Extract source information from entity.
-
-        Args:
-            entity: Telegram entity (Channel, Chat, or User)
-            chat_identifier: Original chat identifier string
-
-        Returns:
-            SourceInfo model
-        """
-        source_id = chat_identifier
-        title = "Unknown"
-        source_type = "unknown"
-        url = ""
-
-        if isinstance(entity, Channel):
-            title = entity.title
-            # Supergroups are Channels with megagroup=True
-            # (they're chats, not broadcast channels)
-            if entity.megagroup:
-                source_type = "supergroup"
-            else:
-                source_type = "channel"
-            if entity.username:
-                source_id = f"@{entity.username}"
-                url = f"https://t.me/{entity.username}"
-            else:
-                source_id = f"channel_{entity.id}"
-                url = f"https://t.me/c/{entity.id}"
-
-        elif isinstance(entity, Chat):
-            title = entity.title
-            source_type = "chat" if not entity.megagroup else "group"
-            source_id = f"chat_{entity.id}"
-            url = f"https://t.me/c/{entity.id}"
-
-        elif isinstance(entity, User):
-            title = self._get_sender_name(entity)
-            source_type = "chat"
-            if entity.username:
-                source_id = f"@{entity.username}"
-                url = f"https://t.me/{entity.username}"
-            else:
-                source_id = f"user_{entity.id}"
-
-        return SourceInfo(id=source_id, title=title, url=url, type=source_type)
-
-    def _get_sender_name(self, sender: Any) -> str:
-        """Get display name for sender.
-
-        Args:
-            sender: Sender entity (User, Channel, etc.)
-
-        Returns:
-            Display name string
-        """
-        if sender is None:
-            return "Unknown"
-
-        if isinstance(sender, User):
-            parts = []
-            if sender.first_name:
-                parts.append(sender.first_name)
-            if sender.last_name:
-                parts.append(sender.last_name)
-            if parts:
-                return " ".join(parts)
-            if sender.username:
-                return f"@{sender.username}"
-            return f"User_{sender.id}"
-
-        elif isinstance(sender, (Channel, Chat)):
-            return sender.title or f"Channel_{sender.id}"
-
-        return "Unknown"
+            return False

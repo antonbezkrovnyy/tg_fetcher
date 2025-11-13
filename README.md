@@ -91,55 +91,11 @@ The observability stack (Grafana / Prometheus / Loki / Pushgateway) is managed o
 
 If you prefer a local, self-contained run for development, see `docs/OBSERVABILITY.md` for quick instructions.
 
-## 🛠️ Development Scripts
+## 🛠️ Development
 
-### Windows (PowerShell)
-
-```powershell
-# Setup and run
-.\scripts\dev.ps1 setup-env     # Create .env file
-.\scripts\dev.ps1 install       # Install dependencies
-.\scripts\dev.ps1 run           # Run locally
-
-# Docker commands
-.\scripts\dev.ps1 docker-up     # Start all services
-.\scripts\dev.ps1 docker-down   # Stop services
-.\scripts\dev.ps1 docker-logs   # View logs
-.\scripts\dev.ps1 docker-clean  # Clean up
-
-# Development
-.\scripts\dev.ps1 test          # Run tests
-.\scripts\dev.ps1 format        # Format code
-.\scripts\dev.ps1 check-all     # Run all checks
-
-# Utilities
-.\scripts\quickstart.ps1        # Full setup from scratch
-.\scripts\status.ps1            # Check system status
-```
-
-### Linux/Mac (Bash)
-
-```bash
-# Setup and run
-./scripts/dev.sh setup-env      # Create .env file
-./scripts/dev.sh install        # Install dependencies
-./scripts/dev.sh run            # Run locally
-
-# Docker commands
-./scripts/dev.sh docker-up      # Start all services
-./scripts/dev.sh docker-down    # Stop services
-./scripts/dev.sh docker-logs    # View logs
-./scripts/dev.sh docker-clean   # Clean up
-
-# Development
-./scripts/dev.sh test           # Run tests
-./scripts/dev.sh format         # Format code
-./scripts/dev.sh check-all      # Run all checks
-
-# Utilities
-./scripts/quickstart.sh         # Full setup from scratch
-./scripts/status.sh             # Check system status
-```
+- Windows: PowerShell scripts in `scripts/` (see `dev.ps1`, `quickstart.ps1`, `status.ps1`).
+- Linux/Mac: Bash scripts in `scripts/` (see `dev.sh`, `quickstart.sh`, `status.sh`).
+- Typical flow: create `.env`, install dependencies, run locally or via Docker. Use `check-all` for CI‑like checks.
 
 ## 📁 Project Structure
 
@@ -180,8 +136,76 @@ All configuration via environment variables (`.env` file):
 - `LOG_FORMAT` - json (default) or text
 - `LOKI_URL` - Loki endpoint (auto-configured in Docker)
 - `PUSHGATEWAY_URL` - Pushgateway endpoint (auto-configured in Docker)
+- `METRICS_MODE` - scrape (default), push, both
 
 See `.env.example` for full list.
+
+### Advanced (events, progress, versions)
+- `ENABLE_EVENTS` — enable Redis Pub/Sub events (default: true)
+- `ENABLE_PROGRESS_EVENTS` — emit periodic progress updates (default: true)
+- `PROGRESS_INTERVAL` — messages per progress update (default: 100)
+- `FETCH_CONCURRENCY_PER_CHAT` — parallelism per chat (default: 3)
+- `COMMENTS_LIMIT_PER_MESSAGE` — max comments to fetch per post (default: 50)
+- `RATE_LIMIT_CALLS_PER_SEC` — API calls per second limit (default: 10.0)
+- `MAX_PARALLEL_CHANNELS` — max channels processed in parallel (default: 3)
+- `DEDUP_IN_RUN_ENABLED` — enable deduplication within a single run (default: false)
+
+### Events bus (Redis)
+- `REDIS_URL` — connection string (e.g., redis://localhost:6379)
+- `REDIS_PASSWORD` — optional password
+- `EVENTS_CHANNEL` — Pub/Sub channel name (default: tg_events)
+- `SERVICE_NAME` — service identifier in events (default: tg_fetcher)
+- `COMMANDS_QUEUE` — Redis list for command subscriber (default: tg_commands)
+- `COMMANDS_BLPOP_TIMEOUT` — BLPOP timeout seconds (default: 5)
+
+### Schema/processing versions
+- `DATA_SCHEMA_VERSION` — version recorded in saved collections (default: 1)
+- `PROGRESS_SCHEMA_VERSION` — version recorded in progress file (default: 1)
+- `PREPROCESSING_VERSION` — version of preprocessing pipeline (default: 1)
+
+### Storage backend
+- `STORAGE_BACKEND` — `fs` (default) or `mongo`
+  - For `mongo`, set:
+    - `MONGO_URL` — connection string (e.g., mongodb://localhost:27017)
+    - `MONGO_DB` — database name
+    - `MONGO_COLLECTION` — collection name
+  - Note: Mongo adapter is provided as a minimal scaffold. Use `fs` for the first production rollout unless Mongo is required.
+
+## 🧭 CLI usage
+
+Run for all configured chats (default):
+
+```bash
+tg-fetch run
+```
+
+Run a single chat for a specific date:
+
+```bash
+tg-fetch single @ru_python --date 2025-11-12
+```
+
+Start a long-running worker that listens to Redis commands queue:
+
+```bash
+tg-fetch listen --worker-id worker-1
+```
+
+Notes:
+- Queue name and timeout come from `COMMANDS_QUEUE` and `COMMANDS_BLPOP_TIMEOUT`. You can override with `--queue` and `--timeout`.
+- Command payload (JSON pushed to Redis list): `{ "command": "fetch", "chat": "ru_python", "date": "2025-11-12" }`.
+- See `docs/CONFIGURATION.md` for details and examples.
+
+### Enqueue a command manually
+
+For local testing, you can push a command into the Redis queue using the helper script:
+
+```powershell
+# Windows PowerShell
+.venv/Scripts/python.exe scripts/push_command.py --chat @ru_python --date 2025-11-12
+```
+
+This will enqueue a JSON payload into `COMMANDS_QUEUE` (default: `tg_commands`).
 
 ## 📦 Data Format
 
@@ -190,6 +214,7 @@ Messages are stored as JSON with versioned schema:
 ```json
 {
   "version": "1.0",
+  "timezone": "UTC",
   "source_info": {
     "id": "@channel",
     "title": "Channel Name",
@@ -229,25 +254,13 @@ Messages are stored as JSON with versioned schema:
 
 ## 📖 Documentation
 
-- [Docker Deployment Guide](docs/DOCKER_DEPLOYMENT.md)
-- [Technical Specification](docs/tech_task/TZ-telegram-fetcher.md)
-- [Pre-Implementation Checklist](docs/PRE_IMPLEMENTATION_CHECKLIST.md)
-- [Copilot Instructions](.github/copilot-instructions.md)
+- Observability & monitoring: `docs/OBSERVABILITY.md`
+- Technical specification: `docs/tech_task/TZ-fetcher-improvements.md`
+- Pre-implementation checklist: `docs/PRE_IMPLEMENTATION_CHECKLIST.md`
 
 ## 🔍 Monitoring
 
-### View Logs in Grafana
-
-1. Open Grafana: http://localhost:3000
-2. Go to Explore
-3. Select Loki data source
-4. Query: `{service="telegram-fetcher"}`
-
-### View Metrics in Prometheus
-
-1. Open Prometheus: http://localhost:9090
-2. Go to Graph
-3. Query metrics (e.g., `telegram_messages_fetched_total`)
+See `docs/OBSERVABILITY.md` for Loki/Grafana/Prometheus quick instructions.
 
 ## 🐛 Troubleshooting
 

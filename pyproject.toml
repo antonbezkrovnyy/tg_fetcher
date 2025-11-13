@@ -17,6 +17,9 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
 ]
 
+[project.scripts]
+tg-fetch = "src.main:cli"
+
 [tool.black]
 line-length = 88
 target-version = ['py311']
@@ -75,6 +78,13 @@ ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = ["pythonjsonlogger.*", "pydantic_settings.*", "dotenv.*"]
+ignore_missing_imports = true
+[[tool.mypy.overrides]]
+module = "prometheus_client.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "redis.*"
 ignore_missing_imports = true
 
 [tool.pydantic-mypy]

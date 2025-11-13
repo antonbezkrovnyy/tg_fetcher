@@ -46,7 +46,7 @@ def test_yesterday_strategy():
     """Test YesterdayStrategy returns correct date range."""
     strategy = YesterdayStrategy()
     yesterday = date.today() - timedelta(days=1)
-    
+
     ranges = [r async for r in strategy.get_date_ranges()]
     assert len(ranges) == 1
     assert ranges[0] == (yesterday, yesterday)
@@ -58,7 +58,7 @@ async def test_fetch_messages():
     """Test end-to-end message fetching."""
     client = await get_client()
     fetcher = MessageFetcher()
-    
+
     result = await fetcher.fetch("@test_channel")
     assert result["success"]
     assert len(result["messages"]) > 0
@@ -72,10 +72,10 @@ def test_with_mock(mocker):
     mock_client.get_messages.return_value = [
         Message(id=1, text="test")
     ]
-    
+
     service = MessageService(mock_client)
     messages = service.get_messages()
-    
+
     assert len(messages) == 1
     mock_client.get_messages.assert_called_once()
 ```

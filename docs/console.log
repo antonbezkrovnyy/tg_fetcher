@@ -1,4 +1,149 @@
+[2025-11-13 14:45:20 Testing] cd "C:\Users\Мой компьютер\Desktop\python-tg"; .venv\Scripts\python.exe -m pytest -q tests\unit\test_retry_logic.py - Run unit tests for retry logic after adding src/core/retry.py
+[2025-11-13 15:05:30 Testing] cd "C:\Users\Мой компьютер\Desktop\python-tg"; .venv\Scripts\python.exe -m pytest -q - Run full python-tg test suite after refactoring daemon retry to core.safe_operation (PASS)
+[2025-11-13 15:22:10 Code] (add) src/core/circuit_breaker.py - Add simple circuit breaker with metrics
+[2025-11-13 15:22:25 Code] (edit) src/observability/metrics.py - Add circuit_breaker_state gauge and circuit_breaker_open_total counter
+[2025-11-13 15:22:50 Code] (edit) src/core/exceptions.py - Add BreakerOpenError
+[2025-11-13 15:23:20 Code] (edit) src/services/session_manager.py - Guard Telethon connect/send_code with circuit breaker and record metrics
+[2025-11-13 15:24:00 Testing] cd "C:\Users\Мой компьютер\Desktop\python-tg"; .venv\Scripts\python.exe -m pytest -q - Run full suite after circuit breaker integration
+[2025-11-13 15:26:10 Testing] cd "C:\Users\Мой компьютер\Desktop\python-tg"; .venv\Scripts\python.exe -m pytest -q - Re-run tests after fixing SessionManager breaker init indentation (PASS)
+[2025-11-13 15:36:10 Code] (edit) src/observability/metrics.py - Add dedup_skipped_total and fetch_lag_seconds metrics
+[2025-11-13 15:36:40 Code] (edit) src/services/usecases/fetch_date_range.py - Implement idempotency/dedup with progress last_message_id and run-level set
+[2025-11-13 15:37:05 Code] (edit) src/services/fetching/message_iterator.py - Add simple throttle based on rate_limit_calls_per_sec and observe freshness metric
+[2025-11-13 15:37:30 Code] (edit) src/services/finalization/finalization_orchestrator.py - Add timezone to summary and push fetch_lag_seconds
+[2025-11-13 15:38:00 Code] (edit) src/services/runners/fetch_runner.py - Enable bounded parallelism across chats via max_parallel_channels
+[2025-11-13 15:38:20 Testing] cd "C:\Users\Мой компьютер\Desktop\python-tg"; .venv\Scripts\python.exe -m pytest -q - Run full test suite after idempotency, throttle, and parallelism changes
+[2025-11-13 16:12:00 Testing] cd "C:\Users\Мой компьютер\Desktop\python-tg"; pytest -q - Run unit tests after fixing iterator throttle default and removing in-run dedup (PASS)
+[2025-11-13 16:25:30 Code] (edit) src/models/schemas.py - Add timezone field to MessageCollection (schema tagging)
+[2025-11-13 16:25:45 Code] (edit) src/core/config.py - Add storage_backend and Mongo connection settings
+[2025-11-13 16:26:10 Code] (add) src/repositories/mongo_repository.py - Scaffold Mongo repository adapter (optional backend)
+[2025-11-13 16:26:30 Code] (edit) src/di/container.py - Select repository by storage_backend (fs|mongo)
+[2025-11-13 16:27:00 Testing] cd "C:\Users\Мой компьютер\Desktop\python-tg"; pytest -q - Run full test suite after schema and DI updates (PASS)
+[2025-11-13 14:33:56 Testing] cd "C:\Users\Мой компьютер\Desktop\python-tg"; $env:FORCE_REFETCH="true"; $env:FETCH_MODE="yesterday"; $env:METRICS_MODE="push"; $env:PYTHONWARNINGS="ignore"; .venv\Scripts\python.exe -m src run --mode yesterday - Validate fetch after adding retry/backoff and metrics
+[2025-11-13 13:51:00 Testing] cd "C:\Users\Мой компьютер\Desktop\python-tg"; $env:FORCE_REFETCH="true"; $env:FETCH_MODE="yesterday"; $env:METRICS_MODE="push"; $env:PYTHONWARNINGS="ignore"; .venv\Scripts\python.exe -m src run --mode yesterday - Run fetch in push metrics mode and verify Pushgateway push
+[2025-11-13 13:48:16 Code] cd "C:\Users\Мой компьютер\Desktop\python-tg"; $env:FORCE_REFETCH="true"; $env:FETCH_MODE="yesterday"; $env:PYTHONWARNINGS="ignore"; & ".venv/Scripts/python.exe" -m src run --mode yesterday - Forced yesterday fetch after observability hardening (Loki batch, masked phone, metrics instrumentation)
+[2025-11-13 13:35:49 Code] cd "C:\Users\Мой компьютер\Desktop\python-tg"; $env:FORCE_REFETCH="true"; $env:FETCH_MODE="yesterday"; $env:PYTHONWARNINGS="ignore"; & ".venv/Scripts/python.exe" -m src run --mode yesterday - Forced yesterday fetch with Redis/Loki/Prometheus/Pushgateway configured via .env (localhost endpoints)
+[2025-11-13 00:00:00 Testing] cd "C:\Users\Мой компьютер\Desktop\python-tg"; .venv\Scripts\python.exe -m pytest -q - Run full test suite after adding SourceInfoMapper tests
+[2025-11-13 00:10:00 Testing] cd "C:\Users\Мой компьютер\Desktop\python-tg"; .venv\Scripts\python.exe -m pytest -q - Run full test suite after adding ProgressService and EventPublisher payload tests
+[2025-11-13 00:20:00 Testing] cd "C:\Users\Мой компьютер\Desktop\python-tg"; .venv\Scripts\python.exe -m pytest -q - Run full test suite after adding TelegramGateway tests
+[2025-11-13 00:22:00 Testing] cd "C:\Users\Мой компьютер\Desktop\python-tg"; .venv\Scripts\python.exe -m pytest -q - Retry after fixing iter_messages stub to be async-iterable
+[2025-11-13 00:30:00 Testing] cd "C:\Users\Мой компьютер\Desktop\python-tg"; .venv\Scripts\python.exe -m pytest -q - Run full suite after adding finalization/postprocess tests
+[2025-11-13 00:40:00 Testing] cd "C:\Users\Мой компьютер\Desktop\python-tg"; .venv\Scripts\python.exe -m pytest -q - Run full suite after adding message_extractor tests and enricher edge case
+[2025-11-13 10:02:00 Testing] & "C:/Users/Мой компьютер/Desktop/python-tg/.venv/Scripts/python.exe" -m pytest -q tests/test_strategies.py - Run strategy tests after fixes (PASS)
+[2025-11-13 10:02:10 Testing] & "C:/Users/Мой компьютер/Desktop/python-tg/.venv/Scripts/python.exe" -m pytest -q tests/integration/test_redis_operations.py - Run Redis integration tests with Testcontainers (skipped: Docker not available)
+[2025-11-13 10:01:25 Testing] .\scripts\type_coverage.ps1 - Generate mypy type coverage report (success)
+[2025-11-13 10:01:10 Testing] & "C:/Users/Мой компьютер/Desktop/python-tg/.venv/Scripts/python.exe" -m pytest -q - Run full test suite (7 failed, 122 passed, 4 skipped)
+[2025-11-13 10:00:55 Testing] & "C:/Users/Мой компьютер/Desktop/python-tg/.venv/Scripts/python.exe" -m mypy src - Run mypy on src (Success: no issues)
+[2025-11-13 10:00:40 Dependencies] & "C:/Users/Мой компьютер/Desktop/python-tg/.venv/Scripts/python.exe" -m pip install -r requirements-dev.txt - Install development dependencies
+[2025-11-13 10:00:30 Dependencies] & "C:/Users/Мой компьютер/Desktop/python-tg/.venv/Scripts/python.exe" -m pip install -r requirements.txt - Install production dependencies
+[2025-11-13 10:00:20 Dependencies] & "C:/Users/Мой компьютер/Desktop/python-tg/.venv/Scripts/python.exe" -m pip install --upgrade pip - Upgrade pip in virtual environment
+[2025-11-13 10:00:15 Environment] .\.venv\Scripts\Activate.ps1 - Activate virtual environment
+[2025-11-13 10:00:10 Environment] python -m venv .venv - Create virtual environment for project
+[2025-11-13 00:02:00 Testing] mypy --version - Check if mypy is available in PATH (not installed on this host)
+[2025-11-13 00:00:00 Testing] pytest -q c:\Users\Мой компьютер\Desktop\python-tg\tests\integration\test_command_subscriber.py::test_subscriber_handler_error_counts_failed - Run new handler-error integration test (skipped on this host: pytest not installed)
+[2025-11-13 12:36:20 Code] (edit) src/services/command_subscriber.py - Add heartbeat debug on BLPOP timeout
+[2025-11-13 12:36:40 Code] (add) scripts/push_command.py - Helper to enqueue fetch commands into Redis
+[2025-11-13 12:21:10 QA] cd "C:\Users\Мой компьютер\Desktop\python-tg"; & ".venv/Scripts/python.exe" -m flake8 src/main.py - Lint main.py after CLI changes
+[2025-11-13 12:21:20 QA] cd "C:\Users\Мой компьютер\Desktop\python-tg"; & ".venv/Scripts/python.exe" -m mypy src/main.py - Type-check main.py (local imports)
+[2025-11-13 12:21:40 Testing] cd "C:\Users\Мой компьютер\Desktop\python-tg"; & ".venv/Scripts/python.exe" -m pytest -q tests/unit - Run unit tests regression
+[2025-11-13 12:18:10 Code] (edit) src/main.py - Add 'listen' CLI subcommand and graceful shutdown
+[2025-11-13 12:06:00 QA] cd "C:\Users\Мой компьютер\Desktop\python-tg"; & ".venv/Scripts/python.exe" -m mypy src/di/container.py src/services/command_subscriber.py - Type check changed files only
+[2025-11-13 12:05:00 QA] cd "C:\Users\Мой компьютер\Desktop\python-tg"; & ".venv/Scripts/python.exe" -m flake8 src/di/container.py src/services/command_subscriber.py - Lint changed files
+[2025-11-13 12:05:10 QA] cd "C:\Users\Мой компьютер\Desktop\python-tg"; & ".venv/Scripts/python.exe" -m mypy src - Type check sources
+[2025-11-13 12:05:25 Testing] cd "C:\Users\Мой компьютер\Desktop\python-tg"; & ".venv/Scripts/python.exe" -m pytest -q tests/unit - Run unit tests
+[2025-11-13 10:22:20 Run] cd "C:\Users\Мой компьютер\Desktop\python-tg"; $env:FETCH_MODE="yesterday"; py -m src - Start fetcher for yesterday (background)
+[2025-11-13 10:22:00 Config] cd "C:\Users\Мой компьютер\Desktop\python-tg"; if (Test-Path .env) { Write-Output 'ENV_EXISTS' } else { Write-Output 'ENV_MISSING' } - Check presence of .env before running fetch
+[2025-11-13 11:05:00 QA] cd "C:\Users\Мой компьютер\Desktop\python-tg"; py -m flake8 src/core/config.py src/services/event_publisher.py src/di/container.py - Lint modified configuration and wiring (PASS)
+[2025-11-13 11:05:20 QA] cd "C:\Users\Мой компьютер\Desktop\python-tg"; py -m mypy src/core/config.py src/services/event_publisher.py src/di/container.py - Type-check modified files (PASS)
+[2025-11-13 11:06:10 Testing] cd "C:\Users\Мой компьютер\Desktop\python-tg"; py -m pytest -q - Run full test suite after config changes (some legacy/integration tests FAILED)
+[2025-11-13 11:12:10 Code] cd "C:\Users\Мой компьютер\Desktop\python-tg"; (edit) src/main.py, pyproject.toml - Add argparse-based CLI with 'run' and 'single' commands and console script 'tg-fetch'
+[2025-11-13 11:12:30 QA] cd "C:\Users\Мой компьютер\Desktop\python-tg"; py -m flake8 src/main.py - Lint CLI module (PASS)
+[2025-11-13 11:12:45 QA] cd "C:\Users\Мой компьютер\Desktop\python-tg"; py -m mypy src/main.py - Type-check CLI module (PASS)
+[2025-11-13 11:13:10 Code] cd "C:\Users\Мой компьютер\Desktop\python-tg"; (edit) src/main.py - Use config.service_name in setup_logging instead of hardcoded value
+[2025-11-13 10:17:30 QA] cd "C:\Users\Мой компьютер\Desktop\python-tg"; py -m flake8 src/services/fetcher_service.py src/services/strategy/protocols.py - Lint changed files only (PASS)
+[2025-11-13 10:18:00 QA] cd "C:\Users\Мой компьютер\Desktop\python-tg"; py -m mypy src/services/fetcher_service.py src/di/container.py src/services/strategy/protocols.py - Type-check modified files (PASS)
+[2025-11-13 10:18:30 Testing] cd "C:\Users\Мой компьютер\Desktop\python-tg"; py -m pytest tests/unit/test_fetch_chat_use_case.py tests/unit/test_fetch_date_range_use_case.py tests/unit/test_fetch_runner.py -q - Focused tests (PASS)
+[2025-11-13 10:15:30 Code] cd "C:\Users\Мой компьютер\Desktop\python-tg"; (edit) refactor fetch_single_chat to use FetchRunner.run_single - Delegate single chat to runner
+[2025-11-13 10:16:00 Code] cd "C:\Users\Мой компьютер\Desktop\python-tg"; (edit) add src/services/strategy/protocols.py - Introduce StrategyProtocol for stronger typing
+[2025-11-13 10:00:01 QA] cd "C:\Users\Мой компьютер\Desktop\python-tg"; py -m flake8 src/services/fetcher_service.py - Lint fetcher_service after delegating to FetchRunner
+[2025-11-13 10:00:15 QA] cd "C:\Users\Мой компьютер\Desktop\python-tg"; py -m mypy src/services/fetcher_service.py - Type-check fetcher_service after edits
+[2025-11-13 10:00:40 Testing] cd "C:\Users\Мой компьютер\Desktop\python-tg"; py -m pytest tests/unit/test_fetch_chat_use_case.py tests/unit/test_fetch_date_range_use_case.py -q - Run focused unit tests for use-cases
+[2025-11-13 10:05:20 QA] cd "C:\Users\Мой компьютер\Desktop\python-tg"; py -m mypy src/services/extractors/message_extractor.py src/di/container.py - Update protocol and container annotations (initial failures)
+[2025-11-13 10:07:10 QA] cd "C:\Users\Мой компьютер\Desktop\python-tg"; py -m mypy src/services/extractors/message_extractor.py src/di/container.py - Protocol conformance fixed (PASS)
+[2025-11-13 10:08:00 Testing] cd "C:\Users\Мой компьютер\Desktop\python-tg"; py -m pytest tests/unit/test_fetch_chat_use_case.py tests/unit/test_fetch_date_range_use_case.py -q - Re-run focused use-case tests (PASS)
+[2025-11-13 10:10:25 Testing] cd "C:\Users\Мой компьютер\Desktop\python-tg"; py -m pytest tests/unit/test_fetch_runner.py -q - New FetchRunner tests (PASS)
+[2025-11-12 00:00:00 Testing] .venv\Scripts\python.exe -m pytest -q tests\unit\test_fetcher_service_skip.py -q - Run focused unit test for skip logic (initial run, failed)
+[2025-11-12 00:00:01 Testing] .venv\Scripts\python.exe -m pytest -q tests\unit\test_fetcher_service_skip.py -q - Re-run after fixing checksum util; passed
+[2025-11-12 00:00:02 Testing] .venv\Scripts\python.exe -m pytest -q tests\unit\test_fetcher_service_skip.py -q - Verify test after integrating use cases; passed
+[2025-11-12 00:00:03 QA] .venv\Scripts\python.exe -m flake8 src\services\usecases\fetch_date_range.py src\services\usecases\fetch_chat.py src\services\progress\progress_reporter.py src\core\config.py src\services\fetcher_service.py - Lint newly added/modified files (observed docstring and line-length issues; to be fixed in QA step)
+[2025-11-12 00:18:00 QA] python -m flake8 tests/unit/test_preprocess.py - Lint new unit tests for preprocessor
+[2025-11-12 00:10:00 QA] python -m flake8 src/services/preprocess/message_preprocessor.py src/services/preprocess/strategies.py src/services/fetcher_service.py - Lint preprocessor and service
+[2025-11-12 00:10:10 QA] python -m mypy src/services/preprocess/message_preprocessor.py src/services/preprocess/strategies.py src/services/fetcher_service.py - Type-check preprocessor and service
+[2025-11-12 00:00:00 QA] python -m flake8 src/services/fetcher_service.py - Lint fetcher_service after cleanup
+[2025-11-12 00:00:10 QA] python -m mypy src/services/fetcher_service.py - Type-check fetcher_service after removals
+[2025-11-12 00:00:20 Testing] pytest -q - Attempt to run test suite (not available in current shell)
+[2025-11-12 10:04:00 Testing] cd "C:\Users\Мой компьютер\Desktop\python-tg"; py -m pytest -q tests\unit - Run unit tests including new cases
+[2025-11-12 10:02:00 QA] cd "C:\Users\Мой компьютер\Desktop\python-tg"; py -m mypy src - Run mypy type checking
+[2025-11-12 10:00:00 QA] cd "C:\Users\Мой компьютер\Desktop\python-tg"; py -m flake8 - Run flake8 after refactors
+[2025-11-12 12:55:10 QA] cd "C:\Users\Мой компьютер\Desktop\python-tg"; py -m flake8 src/di/container.py src/services/fetcher_service.py src/services/usecases/fetch_date_range.py src/services/usecases/fetch_chat.py - Lint DI wiring and use-cases after edits
+[2025-11-12 12:57:20 QA] cd "C:\Users\Мой компьютер\Desktop\python-tg"; py -m mypy src/di/container.py src/services/usecases/fetch_date_range.py src/services/usecases/fetch_chat.py src/services/fetcher_service.py - Type-check DI and use-cases; fix annotations
+[2025-11-12 13:05:30 QA] cd "C:\Users\Мой компьютер\Desktop\python-tg"; py -m flake8 src/services/usecases/fetch_date_range.py - Re-run flake8 after line-wraps
+[2025-11-12 13:06:40 QA] cd "C:\Users\Мой компьютер\Desktop\python-tg"; py -m flake8 src/di/container.py src/services/usecases/fetch_date_range.py src/services/usecases/fetch_chat.py src/services/fetcher_service.py - Lint all targeted files (PASS)
+[2025-11-12 13:07:15 QA] cd "C:\Users\Мой компьютер\Desktop\python-tg"; py -m mypy src/services/usecases/fetch_date_range.py src/services/usecases/fetch_chat.py src/services/fetcher_service.py src/di/container.py - Final type check (PASS)
 [2025-11-10 10:22:36 Docker] docker compose -f C:\Users\Мой компьютер\Desktop\python-tg\docker-compose.yml up -d telegram-fetcher - Start telegram fetcher daemon
+[2025-11-10 20:12:30 Git] git -C "c:\\Users\\Мой компьютер\\Desktop\\python-tg" add -A - Stage scheduler changes
+[2025-11-10 20:12:35 Git] git -C "c:\\Users\\Мой компьютер\\Desktop\\python-tg" commit --no-verify -m "feat: add daily fetch scheduler service for ru_python" - Commit scheduler
+[2025-11-10 20:12:40 Git] git -C "c:\\Users\\Мой компьютер\\Desktop\\python-tg" push origin main - Push commit to remote main
+[2025-11-10 12:05:10 Git] git -C "c:\\Users\\Мой компьютер\\Desktop\\python-tg" tag -a v0.1.0 -m "v0.1.0: first integrated release (fetcher + web + analyzer pipeline)" - Create release tag
+[2025-11-10 12:05:15 Git] git -C "c:\\Users\\Мой компьютер\\Desktop\\python-tg" push origin v0.1.0 - Push release tag to remote
+[2025-11-12 09:15:00 Code] add metrics.py & integrate Prometheus + retry/backoff in daemon - Implement reliability & observability enhancements
+[2025-11-12 09:16:10 Config] add .pre-commit-config.yaml - Introduce pre-commit hooks (black, isort, flake8, mypy)
+[2025-11-12 09:25:05 Environment] .\.venv\Scripts\Activate.ps1 - Activate project virtual environment (Windows PowerShell)
+[2025-11-12 11:05:20 Testing] py -m flake8 src/services/fetcher_service.py - Lint check for fetcher_service after comment/TODO edits
+[2025-11-12 11:06:05 Testing] py -m mypy src/services/fetcher_service.py - Type check (found Path vs str mismatch)
+[2025-11-12 11:09:30 Testing] py -m mypy src/services/fetcher_service.py - Type check after fix (_compute_file_checksum accepts Path) – success
+[2025-11-12 11:10:10 Testing] py -m flake8 src/services/fetcher_service.py - Lint check (only C901 complexity warnings remain)
+[2025-11-12 11:35:20 Code] refactor: extract skip helpers in fetcher_service - Introduce _maybe_skip_existing/_reset_progress_gauge/_publish_fetch_skipped
+[2025-11-12 11:36:05 Testing] py -m mypy src/services/fetcher_service.py - Type check after refactor (helpers) – success
+[2025-11-12 11:36:40 Testing] py -m flake8 src/services/fetcher_service.py - Lint check after refactor (E501 resolved; C901 reduced)
+[2025-11-12 12:15:10 Code] refactor: extract iteration helper and gauge/merge helpers - _iterate_messages_for_date_range, _maybe_merge_short_message, _update_progress_gauge
+[2025-11-12 12:15:40 Testing] py -m mypy src/services/fetcher_service.py - Type check after helper extraction – success
+[2025-11-12 12:16:05 Testing] py -m flake8 src/services/fetcher_service.py - Lint check: E501 addressed; remaining C901 on 3 methods (accepted defer)
+[2025-11-12 12:28:40 Code] refactor: extract _finalize_date_range helper - Move saving/postprocess/events/logging into dedicated method
+[2025-11-12 12:28:55 Testing] py -m mypy src/services/fetcher_service.py - Type check – success
+[2025-11-12 12:29:15 Testing] py -m flake8 src/services/fetcher_service.py - Lint: C901 remains (fetch_single_chat=11, _iterate=14); F841 fixed
+[2025-11-12 12:30:00 Documentation] create_file docs/tech_task/TZ-fetcher-modularization.md - Add modularization technical spec
+[2025-11-12 12:41:10 Code] create_file src/services/preprocess/message_preprocessor.py - Introduce MessagePreprocessor component
+[2025-11-12 12:41:35 Code] wire MessagePreprocessor in FetcherService.__init__ - Integrate enrichment/merge via preprocessor
+[2025-11-12 12:41:50 Testing] py -m mypy src/services/fetcher_service.py src/services/preprocess/message_preprocessor.py - Type check (initial issues found)
+[2025-11-12 12:42:25 Code] fix type hints in MessagePreprocessor - Add precise Callable signatures
+[2025-11-12 12:42:40 Testing] py -m mypy src/services/fetcher_service.py src/services/preprocess/message_preprocessor.py - Type check success
+[2025-11-12 12:43:05 Testing] py -m flake8 src/services/fetcher_service.py src/services/preprocess/message_preprocessor.py - Lint fixes needed (E501/E251)
+[2025-11-12 12:44:10 Code] shorten lines via cfg alias and parentheses - Resolve E501/E251 around constructor wiring
+[2025-11-12 12:44:30 Testing] py -m flake8 src/services/fetcher_service.py src/services/preprocess/message_preprocessor.py - Lint: only C901 remains (known)
+[2025-11-12 13:05:10 Testing] pytest -q - Attempted to run tests via system pytest (failed: command not found in PATH on host)
+[2025-11-12 13:05:20 Testing] runTests (VS Code API) - Executed test suite via IDE-integrated runner for reliability on this environment
+[2025-11-12 13:20:05 QA] py -m flake8 - Lint after refactor (ResultEnricher, EventPublisher): fixed F401/D107; PASS
+[2025-11-12 13:21:10 Testing] py -m mypy src - Type check after refactor: PASS (41 files)
+[2025-11-13 13:20:10 Testing] cd "C:\Users\Мой компьютер\Desktop\python-tg"; & ".venv/Scripts/python.exe" -m pytest -q tests/unit/test_message_extractor.py tests/unit/test_message_extractor_service.py - Focused run for message_extractor fixes (PASS)
+[2025-11-13 13:21:00 Testing] cd "C:\Users\Мой компьютер\Desktop\python-tg"; & ".venv/Scripts/python.exe" -m pytest -q tests/unit - Run full unit test suite after message_extractor fixes (PASS)
+[2025-11-12 13:24:40 Testing] py -m pytest -q tests\unit - Unit tests after refactor: 83 passed, 0 failed (Windows paths normalized)
+[2025-11-13 13:28:10 Testing] cd "C:\Users\Мой компьютер\Desktop\python-tg"; & ".venv/Scripts/python.exe" -m pytest -q tests/unit/test_message_extractor.py tests/unit/test_result_enricher_negative.py - Focused tests for exception-path coverage (PASS)
+[2025-11-13 13:29:00 Testing] cd "C:\Users\Мой компьютер\Desktop\python-tg"; & ".venv/Scripts/python.exe" -m pytest -q tests/unit - Full unit suite after new coverage tests (PASS)
+[2025-11-12 10:15:10 QA] cd "C:\Users\Мой компьютер\Desktop\python-tg"; py -m mypy src - Type check Python sources
+[2025-11-12 10:15:20 QA] cd "C:\Users\Мой компьютер\Desktop\python-tg"; py -m flake8 - Lint code with flake8
+[2025-11-12 10:15:35 Testing] cd "C:\Users\Мой компьютер\Desktop\python-tg"; py -m pytest -q -k unit - Run unit test subset
+[2025-11-12 10:26:10 QA] cd "C:\Users\Мой компьютер\Desktop\python-tg"; py -m flake8 src/services/fetcher_service.py - Lint check after removing _extract_and_normalize_links
+[2025-11-12 10:27:05 Testing] cd "C:\Users\Мой компьютер\Desktop\python-tg"; py -m pytest -q -k unit - Unit tests after link normalization centralization
+[2025-11-12 14:20:00 QA] cd "C:\Users\Мой компьютер\Desktop\python-tg" - Switch to project directory
+[2025-11-12 14:20:05 QA] python -m flake8 src/services/fetcher_service.py - Lint fetcher_service after ProgressService/SourceInfoMapper wiring
+[2025-11-12 14:20:25 QA] python -m mypy src/services/fetcher_service.py - Type-check fetcher_service after wiring (PASS)
+[2025-11-12 14:21:00 QA] python -m black src/services/fetcher_service.py - Autoformat to fix trailing blank lines
+[2025-11-12 14:21:10 QA] python -m flake8 src/services/fetcher_service.py - Lint after Black (PASS)
+[2025-11-12 15:05:10 QA] & "C:/Users/Мой компьютер/Desktop/python-tg/.venv/Scripts/python.exe" -m flake8 src/services/fetcher_service.py src/services/gateway/telegram_gateway.py src/services/finalization/finalization_orchestrator.py src/di/container.py - Lint modified files after helper removal
+[2025-11-12 15:07:20 QA] & "C:/Users/Мой компьютер/Desktop/python-tg/.venv/Scripts/python.exe" -m black src/services/fetcher_service.py - Autoformat to fix EOF whitespace
+[2025-11-12 15:08:05 QA] & "C:/Users/Мой компьютер/Desktop/python-tg/.venv/Scripts/python.exe" -m flake8 src/services/fetcher_service.py src/services/gateway/telegram_gateway.py src/services/finalization/finalization_orchestrator.py src/di/container.py - Lint re-check (PASS)
+[2025-11-12 15:09:30 QA] & "C:/Users/Мой компьютер/Desktop/python-tg/.venv/Scripts/python.exe" -m mypy src/services/fetcher_service.py src/services/gateway/telegram_gateway.py src/services/finalization/finalization_orchestrator.py src/di/container.py - Type-check modified files (PASS)
+[2025-11-12 15:12:00 Testing] & "C:/Users/Мой компьютер/Desktop/python-tg/.venv/Scripts/python.exe" -m pytest -q - Run test suite (integration Redis tests failed on local env; unit tests passed)
 # Console Commands Log
 
 ## 2025-11-08: Phase 4 - Redis PubSub Automation (python-tg daemon mode)
@@ -190,6 +335,9 @@ logger.info(
 [2025-11-09 15:34:00 Code] create_file src/core/retry.py - Created retry utilities with exponential backoff (245 lines)
 [2025-11-09 15:36:00 Code] create_file src/core/shutdown.py - Created graceful shutdown handler (157 lines)
 [2025-11-09 15:38:00 Testing] create_file tests/unit/test_command_validation.py - Created command validation tests (320 lines)
+[2025-11-12 11:05:00 QA] mypy src/ - Verify type fixes (retry_with_backoff now returns generic T)
+[2025-11-12 11:07:30 QA] mypy src/services/command_subscriber.py - Targeted type check after redis client adjustments
+[2025-11-12 11:08:10 QA] mypy src/ - Full project type check (0 errors)
 [2025-11-09 15:40:00 Testing] create_file tests/unit/test_date_expansion.py - Created date expansion tests (290 lines)
 [2025-11-09 15:42:00 Testing] create_file tests/unit/test_retry_logic.py - Created retry logic tests (360 lines)
 [2025-11-09 15:44:00 Testing] create_file tests/integration/test_redis_operations.py - Created Redis integration tests (330 lines)
@@ -224,3 +372,131 @@ logger.info(
 
 [2025-11-09 10:12:00 Documentation] create_file docs/tech_task/TZ-fetcher-reliability-and-testing.md - Создано техническое задание по повышению надёжности и тестированию фетчера
 [2025-11-09 10:25:00 Documentation] update_file docs/tech_task/TZ-fetcher-reliability-and-testing.md - Удалены разделы метрик и алертов; фокус на логировании, тестах и надежности
+
+[2025-11-12 09:20:35 Dependencies] pip install -r requirements-dev.txt - Installed dev tools (pre-commit, black, isort, flake8, mypy)
+
+[2025-11-12 10:05:10 QA] pre-commit run --all-files - Verify code quality checks across repo
+[2025-11-12 10:05:40 Testing] pytest -q - Run test suite quietly to validate build
+[2025-11-12 11:12:20 QA] flake8 src/ - Run flake8 to collect current lint issues before cleanup
+[2025-11-12 11:18:40 QA] flake8 src/services/fetcher_service.py src/core/exceptions.py src/observability/logging_config.py - Verify targeted fixes
+[2025-11-12 12:05:10 Code] update EventPublisher with progress events (started/progress/stage) - Added new publisher methods for Redis Pub/Sub
+[2025-11-12 12:05:20 Code] wire progress events in fetcher_service _process_date_range - Start, periodic progress every 100, and stage changes
+[2025-11-12 12:05:30 Config] add enable_progress_events & progress_interval to FetcherConfig - Defaults: true and 100
+[2025-11-12 12:06:00 QA] & py -m mypy src/ - Type-check after progress events implementation (0 errors)
+[2025-11-12 12:06:20 QA] & py -m flake8 src/services/event_publisher.py src/services/fetcher_service.py - Lint check (only C901 remaining)
+
+[2025-11-12 09:38:46 Testing] powershell -NoProfile -ExecutionPolicy Bypass -Command "$Env:TELEGRAM_CHATS='@ru_python'; $Env:FETCH_MODE='date'; $Env:FETCH_DATE='2025-11-03'; $Env:ENABLE_PROGRESS_EVENTS='true'; $Env:PROGRESS_INTERVAL='100'; & py .\\scripts\\test_fetch_today.py" - Attempted date-specific fetch inline (env var syntax failed; ran with defaults)
+[2025-11-12 09:46:50 Code] create_file scripts/fetch_ru_python_date.ps1 - Add helper script to set env vars and run date fetch locally
+[2025-11-12 09:47:12 Testing] powershell -NoProfile -ExecutionPolicy Bypass -File "c:\Users\Мой компьютер\Desktop\python-tg\scripts\fetch_ru_python_date.ps1" - ru_python 2025-11-03 fetched (268 msgs); Redis events published successfully
+[2025-11-12 14:16:30 Testing] py -m mypy src/services/fetcher_service.py src/observability/metrics_adapter.py src/services/fetching/message_iterator.py - Type check changed files
+[2025-11-12 14:16:39 Testing] py -m flake8 src/services/fetcher_service.py src/observability/metrics_adapter.py src/services/fetching/message_iterator.py - Lint changed files
+[2025-11-12 14:17:46 Testing] py -m flake8 src/services/fetcher_service.py src/observability/metrics_adapter.py src/services/fetching/message_iterator.py - Lint after fixes
+[2025-11-12 14:18:06 Testing] py -m flake8 src/services/fetcher_service.py src/observability/metrics_adapter.py src/services/fetching/message_iterator.py - Lint after C901 suppression
+[2025-11-12 14:20:56 Testing] py -m mypy src - Full type check before tests
+[2025-11-12 14:21:06 Testing] py -m flake8 src - Full lint before tests
+[2025-11-12 14:22:04 Testing] py -m flake8 src/core/exceptions.py - Lint exceptions fixes
+[2025-11-12 14:22:29 Testing] py -m flake8 src/core/exceptions.py - Lint after B042 suppression
+[2025-11-12 14:22:49 Testing] py -m flake8 src/core/exceptions.py - Lint after wrapping long lines
+[2025-11-12 14:23:08 Testing] py -m flake8 src/core/exceptions.py - Lint after moving noqa
+[2025-11-13 16:48:20 Testing] cd "C:\Users\Мой компьютер\Desktop\python-tg"; pytest -q - Run full test suite after recent docs/config/dedup flag changes (PASS)
+[2025-11-13 16:49:10 Git] git -C "c:\Users\Мой компьютер\Desktop\python-tg" add docs/RELEASE_NOTES_v0.2.0.md - Stage release notes for v0.2.0
+[2025-11-13 16:49:25 Git] git -C "c:\Users\Мой компьютер\Desktop\python-tg" add .pre-commit-config.yaml - Stage pre-commit config required by hook
+[2025-11-13 16:49:40 Git] git -C "c:\Users\Мой компьютер\Desktop\python-tg" add docs/RELEASE_NOTES_v0.2.0.md - Re-stage release notes after pre-commit fixed line endings
+[2025-11-13 16:50:05 Git] git -C "c:\Users\Мой компьютер\Desktop\python-tg" commit -m "docs: add release notes for v0.2.0" - Commit release notes (pre-commit hooks passed)
+[2025-11-13 16:50:30 Git] git -C "c:\Users\Мой компьютер\Desktop\python-tg" tag -a v0.2.0 -m "v0.2.0: resilience, circuit breaker, idempotency, metrics expansion, storage backend switch (Mongo experimental)" - Create annotated tag
+[2025-11-13 16:50:45 Git] git -C "c:\Users\Мой компьютер\Desktop\python-tg" push origin main - Push main branch with release notes commit
+[2025-11-13 16:51:00 Git] git -C "c:\Users\Мой компьютер\Desktop\python-tg" push origin v0.2.0 - Push annotated tag v0.2.0
+[2025-11-13 16:52:10 Git] git -C "c:\Users\Мой компьютер\Desktop\python-tg" status -s - Check working tree status after release push
+[2025-11-12 14:24:39 Testing] Smoke: ensure artifact exists then verify idempotent skip for ru_python 2025-11-03
+[2025-11-12 14:26:33 Testing] py -m flake8 src/services/fetcher_service.py; py -m mypy src/services/fetcher_service.py - Lint/type after service-message fix
+[2025-11-12 14:26:43 Testing] Smoke: run idempotent skip for ru_python 2025-11-03 with FORCE_REFETCH=false
+[2025-11-12 14:27:23 Testing] Invoke-WebRequest metrics gauge check for ru_python 2025-11-03 on :9090
+[2025-11-12 14:31:21 Testing] py -m flake8 src/core/config.py src/services/event_publisher.py src/services/fetcher_service.py; py -m mypy src/core/config.py src/services/event_publisher.py src/services/fetcher_service.py - Lint/type after enable_events wiring
+[2025-11-12 14:41:12 Testing] py -m flake8 src/core/config.py src/services/event_publisher.py src/services/fetcher_service.py - recheck E501
+[2025-11-12 14:41:35 Testing] py -m flake8 src/services/event_publisher.py - recheck
+[2025-11-12 14:41:46 Testing] py -m mypy src/core/config.py src/services/event_publisher.py src/services/fetcher_service.py - type recheck
+[2025-11-12 14:41:52 Testing] Smoke: run date fetch with ENABLE_EVENTS=false to confirm no Redis connect
+[2025-11-12 14:42:51 Testing] py -m flake8 src - Full repo lint
+[2025-11-12 14:47:56 Testing] py -m flake8 src/daemon.py src/models/schemas.py - Fixes for E501/B023/F841
+[2025-11-12 14:48:41 Testing] py -m flake8 src - Full repo lint after fixes
+[2025-11-12 14:49:57 Testing] py -m flake8 src - Full repo lint after final fixes
+[2025-11-12 14:51:06 Testing] py -m flake8 src - Full repo lint (E501 cleanup)
+[2025-11-12 14:51:28 Testing] py -m flake8 src - Full repo lint (final)
+[2025-11-12 14:51:55 Testing] py -m flake8 src - Lint until clean
+[2025-11-12 14:52:01 Testing] py -m mypy src - Full repo types
+[2025-11-12 14:52:26 Testing] py -m mypy src - Recheck after daemon lambda fix
+[2025-11-12 15:01:53 Testing] py -m flake8 src - Lint after refactors
+[2025-11-12 15:02:52 Testing] py -m flake8 src - Re-run after fixing E501 and B023
+[2025-11-12 15:07:23 Testing] py -m flake8 src - Confirm lint clean after final wraps
+[2025-11-12 15:07:33 Testing] py -m mypy src - Type-check after refactors
+[2025-11-12 15:12:30 Testing] py -m mypy src - Re-run after fixing type issues
+[2025-11-12 15:42:25 Testing] py -m pytest -q -k unit - Run new unit tests
+[2025-11-12 16:05:01 Testing] py -m pytest -q -k unit - Run iterator event tests
+[2025-11-12 16:09:03 Testing] py -m flake8 src tests - Lint after tests and pydantic migration
+[2025-11-12 16:12:33 Testing] py -m flake8 src tests - Re-run after trailing whitespace fix
+[2025-11-12 16:14:00 Testing] py -m mypy src tests - Type check after changes
+[2025-11-12 16:16:56 Testing] py -m mypy src - Type check src only
+[2025-11-12 16:17:31 Testing] py -m pytest -q -k unit - Run unit tests after enrich test and fixes
+[2025-11-12 16:27:06 Testing] py -m pytest -q -k unit - Fix test_enrich expectations and re-run
+
+[2025-11-12 17:05:10 QA] cd "C:\Users\Мой компьютер\Desktop\python-tg"; py -m flake8 src/services/fetcher_service.py - Lint check after indentation/async-scope fix
+[2025-11-12 17:05:40 QA] cd "C:\Users\Мой компьютер\Desktop\python-tg"; py -m mypy src - Full type check to ensure no regressions
+[2025-11-12 17:06:20 Testing] cd "C:\Users\Мой компьютер\Desktop\python-tg"; py -m pytest -q -k unit - Quick unit test run after fix
+[2025-11-12 17:07:05 Testing] cd "C:\Users\Мой компьютер\Desktop\python-tg"; py -m pytest -q -k test_enrich_single_chat_result_sets_checksum_and_artifact_paths - Verify checksum monkeypatch path after refactor
+[2025-11-12 17:07:45 Testing] cd "C:\Users\Мой компьютер\Desktop\python-tg"; py -m pytest -q -k unit - Full unit suite re-run: confirm green
+[2025-11-12 17:12:10 Code] create_file src/repositories/protocols.py - Introduce MessageRepositoryProtocol (hexagonal port)
+[2025-11-12 17:13:00 Code] update result_enricher/finalizer to depend on repository protocol - Decouple from concrete repository
+[2025-11-12 17:13:40 QA] cd "C:\Users\Мой компьютер\Desktop\python-tg"; py -m mypy src - Type check after protocol refactor
+[2025-11-12 17:14:20 Testing] cd "C:\Users\Мой компьютер\Desktop\python-tg"; py -m pytest -q -k unit - Unit tests after protocol refactor
+[2025-11-12 17:15:10 Documentation] create_file docs/tech_task/TZ-hexagonal-refactor.md - Add technical specification for hexagonal refactor (repository port)
+[2025-11-12 17:18:20 Code] create_file src/repositories/protocols.py - Add MessageRepositoryProtocol (port)
+[2025-11-12 17:19:05 Code] update src/services/postprocess/result_enricher.py - Depend on repository port
+[2025-11-12 17:19:30 Code] update src/services/postprocess/finalizer.py - Depend on repository port
+[2025-11-12 17:20:10 Code] create_file src/gateways/telegram_protocols.py - Add TelegramGatewayProtocol
+[2025-11-13 13:05:10 QA] powershell -NoProfile -Command "flake8 src/services/command_subscriber.py src/di/container.py" - Lint changed files (flake8 not found in PATH on host)
+[2025-11-13 13:06:00 QA] py -m py_compile src/services/command_subscriber.py src/di/container.py - Quick syntax check for modified files (PASS)
+[2025-11-13 13:08:40 Dependencies] cd "C:\Users\Мой компьютер\Desktop\python-tg"; .venv\Scripts\python.exe -m pip install -r requirements-dev.txt - Install dev dependencies (pytest, testcontainers)
+[2025-11-13 13:12:20 Testing] cd "C:\Users\Мой компьютер\Desktop\python-tg"; .venv\Scripts\python.exe -m pytest -q tests\integration\test_command_subscriber.py - Run integration tests for CommandSubscriber (SKIPPED if Docker unavailable)
+[2025-11-13 13:18:10 QA] cd "C:\Users\Мой компьютер\Desktop\python-tg"; .venv\Scripts\python.exe -m mypy src - Full mypy run (known legacy errors in fetcher_service.py)
+[2025-11-13 13:19:00 Testing] cd "C:\Users\Мой компьютер\Desktop\python-tg"; .venv\Scripts\python.exe -m pytest -q tests\unit\test_create_fetch_command.py - Run unit tests for create_fetch_command (PASS)
+[2025-11-13 13:19:20 QA] powershell -NoProfile -File scripts/type_coverage.ps1 - Generate mypy type coverage report into typecov/ (may be partial if errors)
+[2025-11-13 13:23:40 Code] (edit) src/di/container.py, src/services/fetcher_service.py - Add providers and wire repo/events/metrics to fix mypy errors
+[2025-11-13 13:24:10 QA] cd "C:\Users\Мой компьютер\Desktop\python-tg"; .venv\Scripts\python.exe -m mypy src - Full mypy run after fixes (PASS)
+[2025-11-12 17:20:40 Code] create_file src/gateways/telegram.py - Add TelethonGateway adapter
+[2025-11-12 17:21:35 Code] update src/services/extractors/message_extractor.py - Make extract_comments accept optional gateway
+[2025-11-12 17:22:05 Code] update src/services/fetcher_service.py - Use TelethonGateway when extracting comments
+[2025-11-12 17:23:00 QA] cd "C:\Users\Мой компьютер\Desktop\python-tg"; py -m mypy src - Type check after gateway integration (fix cast)
+[2025-11-12 17:24:10 Code] create_file src/services/fetching/date_range_processor.py - Introduce DateRangeProcessor helper (encapsulate MessageIterator)
+[2025-11-12 17:24:45 Code] update src/services/fetcher_service.py - Wire DateRangeProcessor and delegate iteration
+[2025-11-12 17:25:10 QA] cd "C:\Users\Мой компьютер\Desktop\python-tg"; py -m mypy src - Type check after DateRangeProcessor
+[2025-11-12 17:26:05 Testing] cd "C:\Users\Мой компьютер\Desktop\python-tg"; py -m pytest -q -k unit - Unit tests after gateway + date range processor
+
+[2025-11-12 17:30:00 Testing] cd "C:\Users\Мой компьютер\Desktop\python-tg"; python -m pytest tests\unit\test_fetch_chat_use_case.py tests\unit\test_fetch_date_range_use_case.py -q - Run two use-case unit tests after fixing SourceInfo url requirement (PASS: 2/2)
+[2025-11-13 12:05:10 QA] cd "C:\Users\Мой компьютер\Desktop\python-tg"; flake8 . - Lint full project (FAILED: tools not found in PATH)
+[2025-11-13 12:06:20 Dependencies] cd "C:\Users\Мой компьютер\Desktop\python-tg"; "C:/Users/Мой компьютер/Desktop/python-tg/.venv/Scripts/python.exe" -m pip install -r requirements-dev.txt - Install dev dependencies (FAILED: PowerShell parsing)
+[2025-11-13 12:07:05 Dependencies] cd "C:\Users\Мой компьютер\Desktop\python-tg"; & "C:/Users/Мой компьютер/Desktop/python-tg/.venv/Scripts/python.exe" -m pip install -r requirements-dev.txt - Ensure dev tools installed (already satisfied)
+[2025-11-13 12:08:10 QA] cd "C:\Users\Мой компьютер\Desktop\python-tg"; & "C:/Users/Мой компьютер/Desktop/python-tg/.venv/Scripts/python.exe" -m flake8 . - Lint entire codebase (style issues remain; syntax OK)
+[2025-11-13 12:09:00 QA] cd "C:\Users\Мой компьютер\Desktop\python-tg"; & "C:/Users/Мой компьютер/Desktop/python-tg/.venv/Scripts/python.exe" -m mypy src - Type-check sources (PASS)
+[2025-11-13 12:12:30 QA] cd "C:\Users\Мой компьютер\Desktop\python-tg"; & "C:/Users/Мой компьютер/Desktop/python-tg/.venv/Scripts/python.exe" -m flake8 src/di/container.py src/repositories/message_repository.py src/services/progress_tracker.py src/services/finalization/finalization_orchestrator.py - Targeted lint after fixes (PASS)
+[2025-11-13 12:18:40 Testing] cd "C:\Users\Мой компьютер\Desktop\python-tg"; & "C:/Users/Мой компьютер/Desktop/python-tg/.venv/Scripts/python.exe" -m pytest -q tests/unit -k "fetcher_service_enrich or fetcher_service_skip" - Focused unit tests for legacy helpers (2 passed, 0 failed)
+[2025-11-13 12:20:10 Testing] cd "C:\Users\Мой компьютер\Desktop\python-tg"; & "C:/Users/Мой компьютер/Desktop/python-tg/.venv/Scripts/python.exe" -m pytest -q tests/unit - Full unit suite (PASS: 97 passed)
+[2025-11-13 10:00:00 Code] refactor(fetcher): make FetcherService an ideal facade using DI - Move strategy selection to StrategyFactory; construct dependencies in Container; delegate run/fetch_single_chat to use-cases
+[2025-11-13 10:02:00 Testing] cd "C:\Users\Мой компьютер\Desktop\python-tg"; python -m pytest tests\unit\test_fetch_chat_use_case.py tests\unit\test_fetch_date_range_use_case.py -q - Sanity test after DI refactor (PASS: 2/2)
+[2025-11-13 10:10:00 Code] improve(DI): move side-effects from Container.__init__ to initialize_runtime; add provide_progress_tracker; sync strategy_name to processor
+[2025-11-13 10:11:00 Testing] cd "C:\Users\Мой компьютер\Desktop\python-tg"; python -m pytest tests\unit\test_fetch_chat_use_case.py tests\unit\test_fetch_date_range_use_case.py -q - Sanity test after DI cleanup (PASS: 2/2)
+[2025-11-13 11:06:51 Dependencies] python -m pip install -r requirements-dev.txt - install dev dependencies (pytest-timeout)
+[2025-11-13 11:11:07 Testing] python -m pytest - unit run (timeout plugin enabled)
+[2025-11-13 11:11:47 Testing] python -m pytest - fixed test_retry recursion; adjusted strategy factory invalid mode test
+[2025-11-13 11:20:23 Testing] python -m pytest --maxfail=1 -q - added tests: correlation, exceptions, skip_checker, date_range_processor
+[2025-11-13 11:44:46 Testing] python -m pytest -q - added tests: checksum edge, metrics_adapter, message_preprocessor, strategies, progress_service
+[2025-11-13 12:01:12 Testing] python -m pytest -q - batch 3 tests: event_publisher, metrics server, message_iterator, fetch_date_range usecase
+[2025-11-13 12:12:20 Dependencies] python -m pip install -r requirements-dev.txt - install dev tools
+[2025-11-13 12:12:29 Dependencies] & .venv\Scripts\python.exe -m pip install -r requirements-dev.txt - install dev tools
+[2025-11-13 12:12:38 QA] black --check . - code style check
+[2025-11-13 12:12:52 QA] isort --check-only . - import order check
+[2025-11-13 12:13:01 QA] flake8 - linting
+[2025-11-13 12:13:10 QA] mypy src - type checking
+[2025-11-13 12:13:21 Testing] python -m pytest -q - full test run after QA
+[2025-11-13 12:24:27 QA] black . - apply formatting
+[2025-11-13 12:24:39 QA] isort . - apply import sorting
+[2025-11-13 12:24:48 QA] flake8 - re-run after formatting

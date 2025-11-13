@@ -19,6 +19,30 @@
 ./scripts/dev.sh install
 ```
 
+---
+
+## 🔬 Quick Dev Checks (Unit/Integration)
+
+### Unit tests
+
+- Run all unit tests:
+   - Windows PowerShell: `pytest -q tests\unit`
+
+### Integration: Redis CommandSubscriber (Testcontainers)
+
+- Requires Docker daemon running
+- Run only these tests:
+   - Windows PowerShell: `pytest -q tests\integration\test_command_subscriber.py`
+- Tests will be skipped automatically if Docker is unavailable
+
+## 🧮 Type Checking & Type Coverage
+
+- Run mypy across sources:
+   - Windows PowerShell: `py -m mypy src`
+- Generate type coverage (line count) report into `typecov/`:
+   - Windows PowerShell: `powershell -NoProfile -File scripts/type_coverage.ps1`
+   - Open `typecov/index.txt` for per-module typed-line stats
+
 **Проверить:**
 - [ ] Все dependencies установлены без ошибок
 - [ ] `pydantic>=2.0.0` установлен

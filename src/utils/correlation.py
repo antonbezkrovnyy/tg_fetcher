@@ -5,6 +5,7 @@ Provides context management for correlation IDs across async request lifecycle.
 
 import contextvars
 import uuid
+from types import TracebackType
 from typing import Optional
 
 # Context variable for storing correlation ID
@@ -83,7 +84,12 @@ class CorrelationContext:
         self.token = _correlation_id.set(self.correlation_id)
         return self.correlation_id
 
-    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
         """Exit context, reset correlation ID.
 
         Args:
