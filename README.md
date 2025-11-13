@@ -257,6 +257,7 @@ Messages are stored as JSON with versioned schema:
 - Observability & monitoring: `docs/OBSERVABILITY.md`
 - Technical specification: `docs/tech_task/TZ-fetcher-improvements.md`
 - Pre-implementation checklist: `docs/PRE_IMPLEMENTATION_CHECKLIST.md`
+- Quick reference (fetcher): `docs/Fetcher_Quick_Reference.md`
 
 ## 🔍 Monitoring
 

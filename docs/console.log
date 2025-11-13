@@ -1,3 +1,6 @@
+[2025-11-13 12:00:30 Git] git add -A - Re-stage after hook normalized line endings
+[2025-11-13 12:00:15 Git] git add -A - Re-stage files after pre-commit line ending fixes
+[2025-11-13 12:00:00 Git] git add -A - Stage docs and README updates for quick reference
 [2025-11-13 10:00:00 QA] cd 'C:\Users\Мой компьютер\Desktop\python-tg'; flake8 - Run flake8 linter[2025-11-13 14:45:20 Testing] cd "C:\Users\Мой компьютер\Desktop\python-tg"; .venv\Scripts\python.exe -m pytest -q tests\unit\test_retry_logic.py - Run unit tests for retry logic after adding src/core/retry.py
 [2025-11-13 15:05:30 Testing] cd "C:\Users\Мой компьютер\Desktop\python-tg"; .venv\Scripts\python.exe -m pytest -q - Run full python-tg test suite after refactoring daemon retry to core.safe_operation (PASS)
 [2025-11-13 15:22:10 Code] (add) src/core/circuit_breaker.py - Add simple circuit breaker with metrics
@@ -520,3 +523,9 @@ logger.info(
 [2025-11-13 16:30:00 Code] (edit) src/di/container.py - Use typing.cast to satisfy Protocol assignment for metrics adapter
 [2025-11-13 16:31:00 Testing] cd 'C:\Users\Мой компьютер\Desktop\python-tg'; .venv\Scripts\python.exe -m mypy src - Re-run mypy (Success)
 [2025-11-13 16:33:00 Git] cd 'C:\Users\Мой компьютер\Desktop\python-tg'; git remote -v - Verify remote configuration
+[2025-11-13 16:34:00 QA] cd 'C:\Users\Мой компьютер\Desktop\python-tg'; pre-commit run -a - Run hooks and auto-fix mixed line endings
+[2025-11-13 16:39:00 Git] cd 'C:\Users\Мой компьютер\Desktop\python-tg'; git commit -m "chore(release): prepare 0.2.0; lint/style cleanups; pre-commit fixes" - Commit changes after hooks passed
+[2025-11-13 16:41:00 Git] cd 'C:\Users\Мой компьютер\Desktop\python-tg'; git tag -a 0.2.0 -m "v0.2.0: fetcher reliability/observability, lint/type green" - Create tag 0.2.0 at HEAD (or force-update if existed)
+[2025-11-13 16:43:00 Git] cd 'C:\Users\Мой компьютер\Desktop\python-tg'; git push origin main - Push main branch to origin
+[2025-11-13 16:44:00 Git] cd 'C:\Users\Мой компьютер\Desktop\python-tg'; git push -f origin 0.2.0 - Push tag 0.2.0 to origin (force)
+[2025-11-13 16:45:00 Git] cd 'C:\Users\Мой компьютер\Desktop\python-tg'; git ls-remote --tags origin | Select-String 'refs/tags/0.2.0' - Verify tag exists on remote
