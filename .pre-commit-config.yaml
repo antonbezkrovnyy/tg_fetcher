@@ -1,8 +1,3 @@
-# Pre-commit hooks configuration
-# See https://pre-commit.com for more information
-# Run manually: pre-commit run --all-files
-# Install: pre-commit install
-
 repos:
   # General file checks
   - repo: https://github.com/pre-commit/pre-commit-hooks
