@@ -222,12 +222,15 @@ async def _run_command(
                 and command != "listen"
             ):
                 import os
-                from prometheus_client import CollectorRegistry, REGISTRY, push_to_gateway
+
+                from prometheus_client import REGISTRY, push_to_gateway
 
                 instance = os.getenv("HOSTNAME", "fetcher-1")
                 # Push default registry as is; group by job and instance
                 push_to_gateway(
-                    config.pushgateway_url.replace("http://", "").replace("https://", ""),
+                    config.pushgateway_url.replace("http://", "").replace(
+                        "https://", ""
+                    ),
                     job=config.service_name,
                     registry=REGISTRY,
                     grouping_key={"instance": instance},

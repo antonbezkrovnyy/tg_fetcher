@@ -7,7 +7,7 @@ handler for each message.
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Any, Awaitable, Callable, Tuple
+from typing import Awaitable, Callable, Tuple
 
 from telethon import TelegramClient
 from telethon.hints import Entity
@@ -31,6 +31,14 @@ class DateRangeProcessor:
         metrics: MetricsAdapter,
         strategy_name: str,
     ) -> None:
+        """Initialize processor with dependencies and initial strategy name.
+
+        Args:
+            config: Fetcher configuration
+            event_publisher: Optional event publisher for progress
+            metrics: Metrics adapter used by iterator
+            strategy_name: Initial strategy label for metrics
+        """
         self._config = config
         self._event_publisher = event_publisher
         self._metrics = metrics
@@ -52,6 +60,10 @@ class DateRangeProcessor:
         correlation_id: str,
         handle: Callable[[TelethonMessage], Awaitable[bool]],
     ) -> Tuple[int, int]:
+        """Iterate messages for a date range and call the handler.
+
+        Returns a tuple of (processed_count, fetched_count).
+        """
         iterator = MessageIterator(
             client=client,
             entity=entity,

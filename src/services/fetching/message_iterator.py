@@ -126,7 +126,7 @@ class MessageIterator:
             return False, True
         return False, False
 
-    async def run(
+    async def run(  # noqa: C901
         self,
         handle_message: Callable[[TelethonMessage], Awaitable[bool]],
     ) -> Tuple[int, int]:
@@ -147,7 +147,8 @@ class MessageIterator:
         self._emit_start_events()
 
         # Simple throttle based on configured calls-per-second (best-effort)
-        # Be tolerant if config has no attribute or it's non-positive: disable throttling.
+        # Be tolerant if config has no attribute or it's non-positive.
+        # Disable throttling in that case.
         try:
             rps = getattr(self.config, "rate_limit_calls_per_sec", None)
             rps_val = float(rps) if rps is not None else None
@@ -166,8 +167,9 @@ class MessageIterator:
                 elapsed = _t.perf_counter() - last_ts
                 if elapsed < min_interval:
                     try:
-                        from os import getenv
                         from asyncio import sleep as _sleep
+                        from os import getenv
+
                         from src.observability.metrics import rate_limit_hits_total
 
                         worker = getenv("HOSTNAME", "fetcher-1")
@@ -218,11 +220,12 @@ class MessageIterator:
         # Observe duration and counters at the end (best-effort)
         try:
             from os import getenv
+
             from src.observability.metrics import (
                 fetch_duration_seconds,
+                fetch_lag_seconds,
                 fetch_messages_total,
                 fetch_runs_total,
-                fetch_lag_seconds,
             )
 
             duration = max(0.0, time.perf_counter() - started_at)
@@ -239,25 +242,20 @@ class MessageIterator:
                 ).inc(fetched)
             # Counter: run per chat/date/strategy
             fetch_runs_total.labels(
-                chat=self.source_id, date=date_str, worker=worker, strategy=self.strategy_name
+                chat=self.source_id,
+                date=date_str,
+                worker=worker,
+                strategy=self.strategy_name,
             ).inc()
             # Freshness: lag between now and latest message timestamp
             if fetched > 0:
                 try:
-                    last_ts_utc = (
-                        self.end_datetime if processed == 0 else None
-                    )  # fallback
-                    # We can approximate lag using last processed msg_datetime observed in progress logs;
-                    # as a simpler proxy, use end boundary minus now when messages fetched.
-                    import time as _t
+                    # Approximate lag as difference between end boundary and now
                     from datetime import timezone as _tz
+
                     now_utc = datetime.now(tz=_tz.utc)
-                    # If we had at least one message, use its date as last; else use end boundary
-                    # Note: we don't keep the last msg timestamp here; finalized summary contains precise value
-                    lag_seconds = max(
-                        0.0,
-                        (now_utc - (self.end_datetime if last_ts_utc else self.end_datetime)).total_seconds(),
-                    )
+                    end_ref = self.end_datetime
+                    lag_seconds = max(0.0, (now_utc - end_ref).total_seconds())
                     fetch_lag_seconds.labels(
                         chat=self.source_id, date=date_str, worker=worker
                     ).observe(lag_seconds)

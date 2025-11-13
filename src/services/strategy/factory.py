@@ -24,6 +24,11 @@ class StrategyFactory:
     """
 
     def __init__(self, config: FetcherConfig) -> None:
+        """Initialize strategy factory with fetcher configuration.
+
+        Args:
+            config: Fetcher configuration object that controls strategy selection
+        """
         self._config = config
 
     def create(self, date_str: Optional[str] = None) -> BaseFetchStrategy:

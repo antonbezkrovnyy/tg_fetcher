@@ -96,7 +96,7 @@ class _ContextFilter(logging.Filter):
         return True
 
 
-def setup_logging(
+def setup_logging(  # noqa: C901
     level: str = "INFO",
     log_format: str = "json",
     service_name: str = "telegram-fetcher",
@@ -148,14 +148,21 @@ def setup_logging(
     if loki_url:
         try:
             import logging_loki
+
             loki_handler = None
             # Optional batching via LokiQueueHandler (best-effort)
-            enable_batch = os.getenv("LOKI_BATCH", "false").lower() in ("1", "true", "yes")
+            enable_batch = os.getenv("LOKI_BATCH", "false").lower() in (
+                "1",
+                "true",
+                "yes",
+            )
             if enable_batch and hasattr(logging_loki, "LokiQueueHandler"):
                 try:
-                    # Some versions support capacity/batch_size; keep minimal to avoid API mismatch
+                    # Some versions support capacity/batch_size
+                    # Keep minimal to avoid API mismatch
+                    push_url = f"{loki_url}/loki/api/v1/push"  # noqa: E501
                     loki_handler = logging_loki.LokiQueueHandler(
-                        url=f"{loki_url}/loki/api/v1/push",
+                        url=push_url,
                         tags={"service": service_name},
                         version="1",
                     )

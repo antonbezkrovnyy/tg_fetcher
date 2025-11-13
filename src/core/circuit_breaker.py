@@ -8,14 +8,14 @@ States:
 This breaker is intentionally minimal and dependency-free. Use per sensitive
 operation (e.g., Telegram connect/auth calls) to avoid hot-loop retries.
 """
+
 from __future__ import annotations
 
-from dataclasses import dataclass
 import time
+from dataclasses import dataclass
 from typing import Optional
 
-from src.observability.metrics import breaker_state, breaker_open_total
-
+from src.observability.metrics import breaker_open_total, breaker_state
 
 CLOSED = 0
 OPEN = 1
@@ -39,12 +39,19 @@ class CircuitBreaker:
     """
 
     def __init__(self, cfg: Optional[BreakerConfig] = None) -> None:
+        """Initialize a CircuitBreaker.
+
+        Args:
+            cfg: Optional breaker configuration; defaults are used if not provided.
+        """
         self.cfg = cfg or BreakerConfig()
         self._state: int = CLOSED
         self._failures: int = 0
         self._opened_at: float = 0.0
         # Initialize state gauge
-        breaker_state.labels(target=self.cfg.target, worker=self.cfg.worker).set(self._state)
+        breaker_state.labels(target=self.cfg.target, worker=self.cfg.worker).set(
+            self._state
+        )
 
     def _maybe_transition_from_open(self) -> None:
         if self._state != OPEN:
@@ -53,7 +60,9 @@ class CircuitBreaker:
         if elapsed >= self.cfg.reset_timeout_seconds:
             # Move to HALF_OPEN; allow a trial call
             self._state = HALF_OPEN
-            breaker_state.labels(target=self.cfg.target, worker=self.cfg.worker).set(self._state)
+            breaker_state.labels(target=self.cfg.target, worker=self.cfg.worker).set(
+                self._state
+            )
 
     def allow_call(self) -> bool:
         """Check if a call is allowed under current state.
@@ -70,7 +79,9 @@ class CircuitBreaker:
         self._failures = 0
         if self._state != CLOSED:
             self._state = CLOSED
-            breaker_state.labels(target=self.cfg.target, worker=self.cfg.worker).set(self._state)
+            breaker_state.labels(target=self.cfg.target, worker=self.cfg.worker).set(
+                self._state
+            )
 
     def record_failure(self, reason: str = "error") -> None:
         """Record a failed call; may transition to OPEN if threshold reached."""
@@ -79,15 +90,19 @@ class CircuitBreaker:
             # Transition to OPEN
             self._state = OPEN
             self._opened_at = time.monotonic()
-            breaker_state.labels(target=self.cfg.target, worker=self.cfg.worker).set(self._state)
+            breaker_state.labels(target=self.cfg.target, worker=self.cfg.worker).set(
+                self._state
+            )
             breaker_open_total.labels(
                 target=self.cfg.target, worker=self.cfg.worker, reason=reason
             ).inc()
 
     @property
     def state(self) -> int:
+        """Return current state code (0 closed, 1 open, 2 half-open)."""
         return self._state
 
     @property
     def failures(self) -> int:
+        """Return consecutive failure count since last success/reset."""
         return self._failures

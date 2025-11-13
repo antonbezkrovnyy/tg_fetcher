@@ -1,3 +1,9 @@
+"""Skip decision helpers for idempotent fetches.
+
+This module encapsulates logic to skip work when an output file already exists
+with a matching checksum recorded in the summary.
+"""
+
 from __future__ import annotations
 
 import json
@@ -25,6 +31,15 @@ class _Repository(Protocol):
 
 @dataclass(frozen=True)
 class SkipDecision:
+    """Result of a skip decision check.
+
+    Attributes:
+        should_skip: True if processing should be skipped
+        reason: Optional human-readable reason for the decision
+        checksum_expected: Expected checksum from summary (if available)
+        checksum_actual: Actual checksum from existing file (if available)
+    """
+
     should_skip: bool
     reason: Optional[str] = None
     checksum_expected: Optional[str] = None
@@ -35,6 +50,7 @@ class SkipExistingChecker:
     """Encapsulates 'skip if already exists with same checksum' logic."""
 
     def __init__(self, repository: _Repository) -> None:
+        """Create checker with a minimal repository dependency."""
         self._repo = repository
 
     def decide(self, source_id: str, start_date: date) -> SkipDecision:

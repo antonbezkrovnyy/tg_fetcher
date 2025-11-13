@@ -7,12 +7,12 @@ allowing other services (like tg_analyzer) to react automatically.
 import json
 import logging
 from datetime import datetime, timezone
-from typing import Optional, Protocol
+from typing import Optional, Protocol, cast
 
 import redis
 
-from src.utils.correlation import get_correlation_id
 from src.observability.metrics import events_published_total
+from src.utils.correlation import get_correlation_id
 
 logger = logging.getLogger(__name__)
 
@@ -161,7 +161,9 @@ class EventPublisher:
             self._redis_client.close()
         logger.info("Disconnected from Redis")
 
-    def _build_and_publish(self, event_type: str, payload: dict) -> None:
+    def _build_and_publish(  # noqa: C901 - orchestrator with retries and metrics
+        self, event_type: str, payload: dict
+    ) -> None:
         """Compose base event fields and publish to Redis.
 
         Non-fatal on errors: logs and returns.
@@ -196,24 +198,37 @@ class EventPublisher:
         event.update(payload)
 
         try:
+            import time
+
             event_json = json.dumps(event)
-            # Publish with retry policy
-            from src.utils.retry import retry_sync
+            # Publish with a simple retry/backoff loop (sync)
             from src.core.config import FetcherConfig
 
-            # Read retry settings from config env (without coupling to DI)
             cfg = FetcherConfig()
-            def _do_publish() -> int:
-                assert self._redis_client is not None
-                return int(self._redis_client.publish(self._channel, event_json))
-
-            subscribers = retry_sync(
-                _do_publish,
-                target="redis_publish",
-                max_attempts=cfg.max_retry_attempts,
-                base=max(0.1, cfg.retry_backoff_factor / 4),
-                max_seconds=max(1.0, cfg.retry_backoff_factor * 4),
-            )
+            attempts = 0
+            delay = max(0.1, cfg.retry_backoff_factor / 4)
+            subscribers: int = 0
+            while True:
+                try:
+                    assert self._redis_client is not None
+                    result = self._redis_client.publish(self._channel, event_json)
+                    subscribers = cast(int, result)
+                    break
+                except Exception as pub_err:  # pragma: no cover - network dependent
+                    attempts += 1
+                    if attempts >= cfg.max_retry_attempts:
+                        raise pub_err
+                    logger.warning(
+                        "Retrying redis_publish",
+                        extra={
+                            "attempt": attempts,
+                            "delay": round(delay, 3),
+                            "error_class": type(pub_err).__name__,
+                        },
+                    )
+                    time.sleep(delay)
+                    # Exponential backoff with a soft cap
+                    delay = min(max(1.0, cfg.retry_backoff_factor * 4), delay * 2)
             logger.info(
                 "Event published",
                 extra={
@@ -246,18 +261,7 @@ class EventPublisher:
                 },
                 exc_info=True,
             )
-            # Rate limit metrics if applicable
-            try:
-                from src.utils.retry import maybe_record_rate_limit
-
-                maybe_record_rate_limit(
-                    e,
-                    source="redis_publish",
-                    chat=payload.get("chat"),
-                    date=payload.get("date"),
-                )
-            except Exception:
-                pass
+            # Rate-limit specific metrics are handled elsewhere; skip here
             # metrics: failure publish
             try:
                 from os import getenv

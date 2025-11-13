@@ -85,8 +85,9 @@ async def extract_comments(
     try:
         if isinstance(entity, Channel) and hasattr(message.replies, "channel_id"):
             comment_count = 0
-            # Use Telethon client to iterate comments; gateway-based iteration is handled
-            # by MessageExtractor.extract() via gateway.extract_comments().
+            # Use Telethon client to iterate comments.
+            # Gateway-based iteration is handled by MessageExtractor.extract()
+            # via gateway.extract_comments().
             iterator = client.iter_messages(
                 message.replies.channel_id,
                 reply_to=message.replies.max_id,
@@ -160,6 +161,7 @@ class MessageExtractor:
     def __init__(
         self, gateway: TelegramGatewayProtocol, comments_limit: int = 50
     ) -> None:
+        """Initialize extractor with a gateway and comments limit."""
         self._gateway = gateway
         self._limit = comments_limit
 
@@ -170,6 +172,7 @@ class MessageExtractor:
         message: TelethonMessage,
         source_info: SourceInfo,
     ) -> Message:
+        """Extract a normalized Message including reactions and comments."""
         reactions = await self._gateway.extract_reactions(message)
         comments = await self._gateway.extract_comments(
             client, entity, message, source_info, limit=self._limit

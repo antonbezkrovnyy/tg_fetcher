@@ -46,10 +46,7 @@ class CommandSubscriber:
             metrics: Metrics adapter for observability (optional)
         """
         # Local import to avoid circular imports at module import time
-        from src.observability.metrics_adapter import (
-            MetricsAdapter,
-            NoopMetricsAdapter,
-        )
+        from src.observability.metrics_adapter import MetricsAdapter, NoopMetricsAdapter
 
         self.redis_url = redis_url
         self.redis_password = redis_password
@@ -96,7 +93,7 @@ class CommandSubscriber:
             self._redis_client.close()
         logger.info("Disconnected from Redis", extra={"worker_id": self.worker_id})
 
-    async def listen(self, timeout: Optional[int] = None) -> None:
+    async def listen(self, timeout: Optional[int] = None) -> None:  # noqa: C901
         """Listen for commands from Redis queue using BLPOP.
 
         Uses blocking list pop (BLPOP) to ensure each command is processed
@@ -185,7 +182,7 @@ class CommandSubscriber:
         finally:
             self._running = False
 
-    async def _handle_command(self, command_json: str) -> None:
+    async def _handle_command(self, command_json: str) -> None:  # noqa: C901
         """Handle incoming Redis command with validation and error handling.
 
         Args:

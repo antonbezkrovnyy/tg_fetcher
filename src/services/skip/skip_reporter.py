@@ -1,3 +1,5 @@
+"""Utilities to report and reset progress for skipped fetches."""
+
 from __future__ import annotations
 
 from typing import Any, Optional
@@ -19,6 +21,14 @@ class SkipReporter:
         metrics: Optional[Any] = None,
         config: Optional[Any] = None,
     ) -> None:
+        """Initialize reporter with optional service and legacy fallbacks.
+
+        Args:
+            progress_service: Preferred ProgressService facade
+            event_publisher: Legacy event publisher fallback
+            metrics: Legacy metrics adapter fallback
+            config: Config object to check enable_progress_events flag
+        """
         self._ps = progress_service
         self._publisher = event_publisher
         self._metrics = metrics

@@ -14,14 +14,15 @@ from __future__ import annotations
 
 import logging
 from datetime import date
-from typing import Optional
+from pathlib import Path
+from typing import Any, Optional
 
 try:
-    from pymongo import MongoClient  # type: ignore
-    from pymongo.collection import Collection  # type: ignore
+    from pymongo import MongoClient  # type: ignore[import-not-found]
+    from pymongo.collection import Collection  # type: ignore[import-not-found]
 except Exception:  # pragma: no cover - optional dependency
-    MongoClient = None  # type: ignore
-    Collection = None  # type: ignore
+    MongoClient = None
+    Collection = None
 
 from src.models.schemas import Message, MessageCollection, SourceInfo
 from src.repositories.protocols import MessageRepositoryProtocol
@@ -37,21 +38,31 @@ class MongoMessageRepository(MessageRepositoryProtocol):
     """
 
     def __init__(self, *, url: str | None, db: str | None, collection: str | None):
+        """Initialize repository with connection parameters.
+
+        Args:
+            url: MongoDB connection URL
+            db: Database name
+            collection: Collection name
+        """
         self._url = url
         self._db_name = db
         self._coll_name = collection
-        self._client: Optional[MongoClient] = None  # type: ignore
-        self._coll: Optional[Collection] = None  # type: ignore
+        # Use Any to avoid depending on external stubs for pymongo
+        self._client: Optional[Any] = None
+        self._coll: Optional[Any] = None
         self._ensure_ready()
 
     def _ensure_ready(self) -> None:
+        """Create client/collection and basic indexes if possible."""
         if MongoClient is None:
             raise RuntimeError(
                 "pymongo is not installed. Install pymongo to use Mongo backend."
             )
         if not self._url or not self._db_name or not self._coll_name:
             raise RuntimeError(
-                "Mongo backend selected but mongo_url/mongo_db/mongo_collection are not configured"
+                "Mongo backend selected but mongo_url/mongo_db/mongo_collection "
+                "are not configured"
             )
         self._client = MongoClient(self._url)
         db = self._client[self._db_name]
@@ -67,6 +78,7 @@ class MongoMessageRepository(MessageRepositoryProtocol):
     def save_collection(
         self, source_name: str, target_date: date, collection: MessageCollection
     ) -> str:
+        """Upsert a collection document and return a pseudo-path string."""
         assert self._coll is not None
         doc = {
             "chat": source_name,
@@ -83,13 +95,19 @@ class MongoMessageRepository(MessageRepositoryProtocol):
             upsert=True,
         )
         # Return a pseudo-path reference for compatibility
-        return f"mongo://{self._db_name}/{self._coll_name}/{source_name}/{target_date.isoformat()}"
+        return (
+            f"mongo://{self._db_name}/{self._coll_name}/{source_name}/"
+            f"{target_date.isoformat()}"
+        )
 
     def load_collection(
         self, source_name: str, target_date: date
     ) -> Optional[MessageCollection]:
+        """Load a collection document for (source, date) or return None."""
         assert self._coll is not None
-        doc = self._coll.find_one({"chat": source_name, "date": target_date.isoformat()})
+        doc = self._coll.find_one(
+            {"chat": source_name, "date": target_date.isoformat()}
+        )
         if not doc:
             return None
         return MessageCollection.model_validate(
@@ -103,58 +121,84 @@ class MongoMessageRepository(MessageRepositoryProtocol):
         )
 
     def file_exists(self, source_name: str, target_date: date) -> bool:
+        """Return True if a collection exists for the given (source, date)."""
         assert self._coll is not None
-        return (
-            self._coll.count_documents(
-                {"chat": source_name, "date": target_date.isoformat()}, limit=1
-            )
-            > 0
+        count = self._coll.count_documents(
+            {"chat": source_name, "date": target_date.isoformat()}, limit=1
         )
+        return bool(count and count > 0)
 
     def create_collection(
         self, source_info: SourceInfo, messages: Optional[list[Message]] = None
     ) -> MessageCollection:
+        """Create a MessageCollection for the Mongo backend path format."""
         return MessageCollection(source_info=source_info, messages=messages or [])
 
     # Artifact path helpers are not applicable for Mongo; return pseudo-paths
-    def get_output_file_path(self, source_name: str, target_date: date):  # type: ignore[override]
-        return f"mongo://{self._db_name}/{self._coll_name}/{source_name}/{target_date.isoformat()}"
+    def get_output_file_path(self, source_name: str, target_date: date) -> Path:
+        """Return a pseudo-path for the output document in Mongo."""
+        db_name = self._db_name or ""
+        coll = self._coll_name or ""
+        return Path(
+            f"mongo://{db_name}/{coll}/{source_name}/" f"{target_date.isoformat()}"
+        )
 
-    def get_summary_path(self, source_name: str, target_date: date):  # type: ignore[override]
-        return f"mongo://{self._db_name}/{self._coll_name}/{source_name}/{target_date.isoformat()}_summary"
+    def get_summary_path(self, source_name: str, target_date: date) -> Path:
+        """Return a pseudo-path for the summary document in Mongo."""
+        db_name = self._db_name or ""
+        coll = self._coll_name or ""
+        return Path(
+            f"mongo://{db_name}/{coll}/{source_name}/"
+            f"{target_date.isoformat()}_summary"
+        )
 
-    def get_threads_path(self, source_name: str, target_date: date):  # type: ignore[override]
-        return f"mongo://{self._db_name}/{self._coll_name}/{source_name}/{target_date.isoformat()}_threads"
+    def get_threads_path(self, source_name: str, target_date: date) -> Path:
+        """Return a pseudo-path for the threads document in Mongo."""
+        db_name = self._db_name or ""
+        coll = self._coll_name or ""
+        return Path(
+            f"mongo://{db_name}/{coll}/{source_name}/"
+            f"{target_date.isoformat()}_threads"
+        )
 
-    def get_participants_path(self, source_name: str, target_date: date):  # type: ignore[override]
-        return f"mongo://{self._db_name}/{self._coll_name}/{source_name}/{target_date.isoformat()}_participants"
+    def get_participants_path(self, source_name: str, target_date: date) -> Path:
+        """Return a pseudo-path for the participants document in Mongo."""
+        db_name = self._db_name or ""
+        coll = self._coll_name or ""
+        return Path(
+            f"mongo://{db_name}/{coll}/{source_name}/"
+            f"{target_date.isoformat()}_participants"
+        )
 
     # Artifact persistence for Mongo is deferred in this scaffold
     def save_summary(self, source_name: str, target_date: date, summary: dict) -> str:
+        """Persist summary dict and return a pseudo-path string."""
         assert self._coll is not None
         self._coll.update_one(
             {"chat": source_name, "date": target_date.isoformat()},
             {"$set": {"summary": summary}},
             upsert=True,
         )
-        return self.get_summary_path(source_name, target_date)
+        return str(self.get_summary_path(source_name, target_date))
 
     def save_threads(self, source_name: str, target_date: date, threads: dict) -> str:
+        """Persist threads dict and return a pseudo-path string."""
         assert self._coll is not None
         self._coll.update_one(
             {"chat": source_name, "date": target_date.isoformat()},
             {"$set": {"threads": threads}},
             upsert=True,
         )
-        return self.get_threads_path(source_name, target_date)
+        return str(self.get_threads_path(source_name, target_date))
 
     def save_participants(
         self, source_name: str, target_date: date, participants: dict[str, str]
     ) -> str:
+        """Persist participants dict and return a pseudo-path string."""
         assert self._coll is not None
         self._coll.update_one(
             {"chat": source_name, "date": target_date.isoformat()},
             {"$set": {"participants": participants}},
             upsert=True,
         )
-        return self.get_participants_path(source_name, target_date)
+        return str(self.get_participants_path(source_name, target_date))

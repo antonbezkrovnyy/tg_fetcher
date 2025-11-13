@@ -175,8 +175,9 @@ class FetcherConfig(BaseSettings):
     dedup_in_run_enabled: bool = Field(
         default=False,
         description=(
-            "Enable deduplication within a single run (skip duplicate message IDs encountered"
-            " in the same execution). Cross-run idempotency via last_processed_id always applies."
+            "Enable deduplication within a single run "
+            "(skip duplicate message IDs encountered in the same execution). "
+            "Cross-run idempotency via last_processed_id always applies."
         ),
     )
 
@@ -213,7 +214,9 @@ class FetcherConfig(BaseSettings):
     metrics_mode: str = Field(
         default="scrape",
         pattern=r"^(scrape|push|both)$",
-        description="How to expose metrics: scrape via HTTP, push to Pushgateway, or both",
+        description=(
+            "How to expose metrics: scrape via HTTP, push to Pushgateway, or both"
+        ),
     )
     loki_url: Optional[str] = Field(
         default=None, description="Loki URL for log shipping (e.g., http://loki:3100)"
@@ -271,7 +274,8 @@ class FetcherConfig(BaseSettings):
         description="Storage backend to use for message persistence: fs or mongo",
     )
     mongo_url: Optional[str] = Field(
-        default=None, description="MongoDB connection string (e.g., mongodb://localhost:27017)"
+        default=None,
+        description="MongoDB connection string (e.g., mongodb://localhost:27017)",
     )
     mongo_db: Optional[str] = Field(
         default=None, description="MongoDB database name for message storage"

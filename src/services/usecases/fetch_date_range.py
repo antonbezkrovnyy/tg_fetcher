@@ -87,6 +87,8 @@ class _ProgressTracker(Protocol):
         last_message_id: int | None,
     ) -> None: ...
 
+    def get_source_progress(self, source: str) -> Any | None: ...
+
 
 @dataclass
 class FetchDateRangeDeps:
@@ -201,6 +203,7 @@ class FetchDateRangeUseCase:
                 if last_processed_id is not None and mid <= last_processed_id:
                     try:
                         from os import getenv
+
                         from src.observability.metrics import dedup_skipped_total
 
                         worker = getenv("HOSTNAME", "fetcher-1")
@@ -217,6 +220,7 @@ class FetchDateRangeUseCase:
                 if self.d.config.dedup_in_run_enabled and mid in seen_ids:
                     try:
                         from os import getenv
+
                         from src.observability.metrics import dedup_skipped_total
 
                         worker = getenv("HOSTNAME", "fetcher-1")
@@ -236,7 +240,10 @@ class FetchDateRangeUseCase:
                 return False
             collection.messages.append(message_data)
             # Track seen ids only if in-run dedup is enabled
-            if isinstance(getattr(message_data, "id", None), int) and self.d.config.dedup_in_run_enabled:
+            if (
+                isinstance(getattr(message_data, "id", None), int)
+                and self.d.config.dedup_in_run_enabled
+            ):
                 seen_ids.add(message_data.id)
             if getattr(message_data, "sender_id", None):
                 sender_name = self.d.source_mapper.get_sender_name(

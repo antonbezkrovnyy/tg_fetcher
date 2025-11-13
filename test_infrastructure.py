@@ -15,7 +15,7 @@ def test_redis() -> bool:
     print("=" * 60)
 
     try:
-        import redis  # type: ignore
+        import redis
 
         redis_host = os.getenv("REDIS_HOST", "tg-redis")
         redis_port = int(os.getenv("REDIS_PORT", 6379))
@@ -133,11 +133,7 @@ def test_pushgateway() -> bool:
     print("=" * 60)
 
     try:
-        from prometheus_client import (  # type: ignore
-            CollectorRegistry,
-            Gauge,
-            push_to_gateway,
-        )
+        from prometheus_client import CollectorRegistry, Gauge, push_to_gateway
 
         pushgateway_url = os.getenv("PUSHGATEWAY_URL", "http://tg-pushgateway:9091")
 

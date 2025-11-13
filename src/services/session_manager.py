@@ -5,11 +5,11 @@ from typing import Any, Optional
 
 from telethon import TelegramClient
 
-from src.observability.logging_config import get_logger
-from src.utils.retry import retry_async, maybe_record_rate_limit
+from src.core.circuit_breaker import BreakerConfig, CircuitBreaker
 from src.core.config import FetcherConfig
-from src.core.circuit_breaker import CircuitBreaker, BreakerConfig
 from src.core.exceptions import BreakerOpenError
+from src.core.retry import safe_operation
+from src.observability.logging_config import get_logger
 
 logger = get_logger(__name__)
 
@@ -46,7 +46,9 @@ class SessionManager:
         safe_phone = phone.replace("+", "")
         self._session_file = self.session_dir / f"session_{safe_phone}.session"
         # Circuit breaker to prevent hot-looping on Telethon issues
-        self._breaker = CircuitBreaker(BreakerConfig(target="telethon", worker="session"))
+        self._breaker = CircuitBreaker(
+            BreakerConfig(target="telethon", worker="session")
+        )
 
     async def get_client(self) -> TelegramClient:
         """Get or create Telegram client.
@@ -72,43 +74,47 @@ class SessionManager:
                 self.api_id,
                 self.api_hash,
             )
+            client = self._client
 
             # Connect and authenticate with retry
             cfg = FetcherConfig()
             try:
                 # Circuit breaker guard for connect
                 if not self._breaker.allow_call():
-                    raise BreakerOpenError("Circuit breaker is OPEN for telethon connect")
-                await retry_async(
-                    lambda: self._client.connect(),
-                    target="telethon_connect",
+                    raise BreakerOpenError(
+                        "Circuit breaker is OPEN for telethon connect"
+                    )
+                assert client is not None
+                await safe_operation(
+                    lambda: client.connect(),
+                    operation_name="telethon_connect",
                     max_attempts=cfg.max_retry_attempts,
-                    base=max(0.1, cfg.retry_backoff_factor / 4),
-                    max_seconds=max(1.0, cfg.retry_backoff_factor * 4),
+                    base_delay=max(0.1, cfg.retry_backoff_factor / 4),
+                    max_delay=max(1.0, cfg.retry_backoff_factor * 4),
                 )
                 self._breaker.record_success()
             except Exception as e:
-                maybe_record_rate_limit(e, source="telethon_connect", chat=None, date=None)
                 # Count as breaker failure for non-rate-limit generic errors
                 self._breaker.record_failure(reason=type(e).__name__)
                 raise
 
-            if not await self._client.is_user_authorized():
+            if not await client.is_user_authorized():
                 logger.info("User not authorized, starting auth process")
                 # Retriable send_code_request (in case of transient errors)
                 try:
                     if not self._breaker.allow_call():
-                        raise BreakerOpenError("Circuit breaker is OPEN for telethon send_code")
-                    await retry_async(
-                        lambda: self._client.send_code_request(self.phone),
-                        target="telethon_send_code",
+                        raise BreakerOpenError(
+                            "Circuit breaker is OPEN for telethon send_code"
+                        )
+                    await safe_operation(
+                        lambda: client.send_code_request(self.phone),
+                        operation_name="telethon_send_code",
                         max_attempts=cfg.max_retry_attempts,
-                        base=max(0.1, cfg.retry_backoff_factor / 4),
-                        max_seconds=max(1.0, cfg.retry_backoff_factor * 4),
+                        base_delay=max(0.1, cfg.retry_backoff_factor / 4),
+                        max_delay=max(1.0, cfg.retry_backoff_factor * 4),
                     )
                     self._breaker.record_success()
                 except Exception as e:
-                    maybe_record_rate_limit(e, source="telethon_send_code", chat=None, date=None)
                     self._breaker.record_failure(reason=type(e).__name__)
                     raise
 
@@ -125,6 +131,7 @@ class SessionManager:
 
             logger.info("Telegram client connected and authorized")
 
+        assert self._client is not None
         return self._client
 
     async def close(self) -> None:

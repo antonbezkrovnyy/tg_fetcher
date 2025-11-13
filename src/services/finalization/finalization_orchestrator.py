@@ -6,8 +6,7 @@ publishing to keep FetcherService slim and focused.
 
 from __future__ import annotations
 
-from datetime import date
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Optional
 
@@ -83,12 +82,8 @@ class FinalizationOrchestrator:
         checksum_fn: Callable[[str | Path | None], Optional[str]],
     ) -> None:
         """Run postprocess, save artifacts, and publish completion event."""
-        first_ts_dt = (
-            collection.messages[0].date if collection.messages else None
-        )
-        last_ts_dt = (
-            collection.messages[-1].date if collection.messages else None
-        )
+        first_ts_dt = collection.messages[0].date if collection.messages else None
+        last_ts_dt = collection.messages[-1].date if collection.messages else None
         first_ts = first_ts_dt.isoformat() if first_ts_dt else None
         last_ts = last_ts_dt.isoformat() if last_ts_dt else None
         checksum = checksum_fn(file_path) if file_path else None
@@ -124,6 +119,7 @@ class FinalizationOrchestrator:
         # Observe freshness lag if possible
         try:
             from os import getenv
+
             from src.observability.metrics import fetch_lag_seconds
 
             worker = getenv("HOSTNAME", "fetcher-1")

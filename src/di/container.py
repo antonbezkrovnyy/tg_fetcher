@@ -6,7 +6,7 @@ Builds and provides core services and use-cases to keep facades thin.
 from __future__ import annotations
 
 from contextlib import suppress
-from typing import Any, Awaitable, Callable, Optional
+from typing import Any, Awaitable, Callable, Optional, cast
 
 from telethon import TelegramClient
 from telethon.hints import Entity
@@ -21,6 +21,7 @@ from src.observability.metrics_adapter import (
 )
 from src.repositories.message_repository import MessageRepository
 from src.repositories.mongo_repository import MongoMessageRepository
+from src.repositories.protocols import MessageRepositoryProtocol
 from src.services.command_subscriber import CommandSubscriber
 from src.services.event_publisher import EventPublisher, EventPublisherProtocol
 from src.services.extractors.message_extractor import MessageExtractor
@@ -37,10 +38,7 @@ from src.services.runners.fetch_runner import FetchRunner, FetchRunnerDeps
 from src.services.session_manager import SessionManager
 from src.services.strategy.factory import StrategyFactory
 from src.services.strategy.protocols import StrategyProtocol
-from src.services.usecases.fetch_chat import (
-    FetchChatDeps,
-    FetchChatUseCase,
-)
+from src.services.usecases.fetch_chat import FetchChatDeps, FetchChatUseCase
 from src.services.usecases.fetch_date_range import (
     FetchDateRangeDeps,
     FetchDateRangeUseCase,
@@ -64,7 +62,7 @@ class Container:
 
         # Repository and post-processing
         if config.storage_backend == "mongo":
-            self._repository = MongoMessageRepository(
+            self._repository: MessageRepositoryProtocol = MongoMessageRepository(
                 url=config.mongo_url,
                 db=config.mongo_db,
                 collection=config.mongo_collection,
@@ -83,10 +81,13 @@ class Container:
             events_channel=config.events_channel,
             service_name=config.service_name,
         )
-        self._metrics: MetricsAdapter = (
-            PrometheusMetricsAdapter()
-            if config.enable_metrics
-            else NoopMetricsAdapter()
+        self._metrics: MetricsAdapter = cast(
+            MetricsAdapter,
+            (
+                PrometheusMetricsAdapter()
+                if config.enable_metrics
+                else NoopMetricsAdapter()
+            ),
         )
 
         # Progress
@@ -137,7 +138,10 @@ class Container:
 
         with suppress(Exception):
             self._event_publisher.connect()
-        if self._config.enable_metrics and self._config.metrics_mode in ("scrape", "both"):
+        if self._config.enable_metrics and self._config.metrics_mode in (
+            "scrape",
+            "both",
+        ):
             with suppress(Exception):
                 ensure_metrics_server(self._config.metrics_port)
 
@@ -174,7 +178,7 @@ class Container:
         """Provide progress tracker instance."""
         return self._progress_tracker
 
-    def provide_repository(self) -> MessageRepository:
+    def provide_repository(self) -> MessageRepositoryProtocol:
         """Provide message repository instance."""
         return self._repository
 

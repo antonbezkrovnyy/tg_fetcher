@@ -86,18 +86,21 @@ class PrometheusMetricsAdapter:
 
     # --- Command subscriber counters ---
     def inc_command_received(self, queue: str, worker: str) -> None:
+        """Increment when a command JSON is received from Redis."""
         try:
             commands_received_total.labels(queue=queue, worker=worker).inc()
         except Exception:
             logger.debug("Prometheus inc_command_received failed", exc_info=True)
 
     def inc_command_success(self, queue: str, worker: str) -> None:
+        """Increment when a command is handled successfully."""
         try:
             commands_success_total.labels(queue=queue, worker=worker).inc()
         except Exception:
             logger.debug("Prometheus inc_command_success failed", exc_info=True)
 
     def inc_command_failed(self, queue: str, worker: str, error_type: str) -> None:
+        """Increment when command handling fails with an error type."""
         try:
             commands_failed_total.labels(
                 queue=queue, worker=worker, error_type=error_type
@@ -106,6 +109,7 @@ class PrometheusMetricsAdapter:
             logger.debug("Prometheus inc_command_failed failed", exc_info=True)
 
     def inc_command_timeout(self, queue: str, worker: str) -> None:
+        """Increment when BLPOP times out without receiving a command."""
         try:
             commands_timeout_total.labels(queue=queue, worker=worker).inc()
         except Exception:
@@ -125,15 +129,19 @@ class NoopMetricsAdapter:
 
     # --- Command subscriber counters ---
     def inc_command_received(self, queue: str, worker: str) -> None:  # noqa: ARG002
+        """No-op: do nothing."""
         return
 
     def inc_command_success(self, queue: str, worker: str) -> None:  # noqa: ARG002
+        """No-op: do nothing."""
         return
 
     def inc_command_failed(
         self, queue: str, worker: str, error_type: str
     ) -> None:  # noqa: ARG002
+        """No-op: do nothing."""
         return
 
     def inc_command_timeout(self, queue: str, worker: str) -> None:  # noqa: ARG002
+        """No-op: do nothing."""
         return

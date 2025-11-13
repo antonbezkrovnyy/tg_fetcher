@@ -1,3 +1,5 @@
+"""Checksum utilities for file integrity validation (SHA-256)."""
+
 from __future__ import annotations
 
 import hashlib

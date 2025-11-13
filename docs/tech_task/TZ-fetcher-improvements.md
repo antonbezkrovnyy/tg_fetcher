@@ -158,7 +158,7 @@ PREPROCESSING_VERSION=1
 ### Фаза 2 (Обогащение данных)
 1. Классификация message_type + merge коротких сообщений.
 2. Language detection.
-3. Progress events (fetch_progress). 
+3. Progress events (fetch_progress).
 4. Delta fetch режим.
 5. Message limit + truncation логирование.
 
@@ -241,4 +241,3 @@ Notes:
  - Merge пороги вынесены в конфиг (значения по умолчанию 120 символов / 90 секунд).
  - Idempotent критерий: только checksum совпадение (дополнительные проверки количества сообщений отложены).
  - Public path accessors в репозитории для унификации и тестируемости.
-

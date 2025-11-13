@@ -17,6 +17,15 @@ class SourceInfoMapper:
     """Map Telethon entities to SourceInfo and resolve sender display names."""
 
     def extract_source_info(self, entity: Entity, chat_identifier: str) -> SourceInfo:
+        """Build SourceInfo from a Telethon entity and fallback identifier.
+
+        Args:
+            entity: Telethon entity (Channel, Chat, or User)
+            chat_identifier: Fallback chat identifier if username is missing
+
+        Returns:
+            SourceInfo describing the source id, title, url, and type
+        """
         source_id = chat_identifier
         title = "Unknown"
         source_type = "unknown"
@@ -53,6 +62,14 @@ class SourceInfoMapper:
         return SourceInfo(id=source_id, title=title, url=url, type=source_type)
 
     def get_sender_name(self, sender: Any) -> str:
+        """Resolve a human-friendly sender display name.
+
+        Args:
+            sender: Telethon User/Channel/Chat object or any
+
+        Returns:
+            Display name or a generic fallback
+        """
         if sender is None:
             return "Unknown"
         if isinstance(sender, User):

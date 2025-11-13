@@ -13,7 +13,7 @@ from typing import Any, Optional
 from src.core.config import FetcherConfig
 from src.di.container import Container
 from src.observability.metrics_adapter import MetricsAdapter
-from src.repositories.message_repository import MessageRepository
+from src.repositories.protocols import MessageRepositoryProtocol
 from src.services.event_publisher import EventPublisherProtocol
 
 # Models are used downstream in use-cases and repositories, not directly here
@@ -22,7 +22,6 @@ from src.utils.correlation import ensure_correlation_id
 # URL parsing utilities no longer needed here; link handling moved to preprocessor
 
 # Telethon details are encapsulated behind gateways and use-cases
-
 
 
 # Use-cases are provisioned via DI container to reduce coupling
@@ -72,7 +71,7 @@ class FetcherService:
         )
 
         # Expose selected dependencies for legacy helpers compatibility
-        self.repository: MessageRepository = container.provide_repository()
+        self.repository: MessageRepositoryProtocol = container.provide_repository()
         self.event_publisher: EventPublisherProtocol = (
             container.provide_event_publisher()
         )
@@ -258,7 +257,7 @@ class FetcherService:
         except Exception:
             logger.debug("_enrich_single_chat_result failed (non-fatal)", exc_info=True)
 
-    def _maybe_skip_existing(
+    def _maybe_skip_existing(  # noqa: C901
         self, source_info: Any, start_date: _date, *, correlation_id: str
     ) -> bool:
         """Return True if output exists with matching checksum and emit events.

@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Any, Iterable, Protocol
+from typing import Any, Protocol
 
 from telethon import TelegramClient
 
@@ -31,6 +31,8 @@ class _ChatUseCase(Protocol):
 
 @dataclass
 class FetchRunnerDeps:
+    """Dependencies container for FetchRunner."""
+
     config: FetcherConfig
     session_manager: Any
     chat_use_case: _ChatUseCase
@@ -40,9 +42,15 @@ class FetchRunner:
     """Coordinates chat iteration and error handling."""
 
     def __init__(self, deps: FetchRunnerDeps) -> None:
+        """Initialize runner with dependencies.
+
+        Args:
+            deps: Container of config, session manager, and chat use-case
+        """
         self.d = deps
 
     async def run_all(self, *, strategy: Any, correlation_id: str) -> None:
+        """Run fetching for all configured chats concurrently."""
         import asyncio
 
         async with self.d.session_manager as client:
@@ -51,7 +59,9 @@ class FetchRunner:
 
             async def run_chat(chat_identifier: str) -> None:
                 async with sem:
-                    await self._run_one(client, chat_identifier, strategy, correlation_id)
+                    await self._run_one(
+                        client, chat_identifier, strategy, correlation_id
+                    )
 
             for chat_identifier in self.d.config.telegram_chats:
                 tasks.append(asyncio.create_task(run_chat(chat_identifier)))
@@ -62,6 +72,7 @@ class FetchRunner:
     async def run_single(
         self, *, strategy: Any, chat_identifier: str, correlation_id: str
     ) -> int:
+        """Run fetching for a single chat and return processed count."""
         async with self.d.session_manager as client:
             return await self._safe_execute(
                 client, chat_identifier, strategy, correlation_id
@@ -74,6 +85,7 @@ class FetchRunner:
         strategy: Any,
         correlation_id: str,
     ) -> None:
+        """Run fetching for one chat (fire-and-forget wrapper)."""
         await self._safe_execute(client, chat_identifier, strategy, correlation_id)
 
     async def _safe_execute(
@@ -83,6 +95,7 @@ class FetchRunner:
         strategy: Any,
         correlation_id: str,
     ) -> int:
+        """Safely execute use-case with error categorization and logging."""
         try:
             return await self.d.chat_use_case.execute(
                 client=client,

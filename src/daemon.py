@@ -7,11 +7,10 @@ Supports horizontal scaling - multiple workers can run simultaneously.
 import asyncio
 import contextlib
 import os
-import random
 import signal
 import sys
 from datetime import datetime, timedelta, timezone
-from typing import Any, Awaitable, Callable
+from typing import Any, Awaitable, Callable, cast
 
 from pydantic import ValidationError
 
@@ -22,6 +21,7 @@ from src.core.exceptions import (
     NetworkError,
     TelegramAuthError,
 )
+from src.core.retry import safe_operation
 from src.observability.logging_config import get_logger, setup_logging
 from src.observability.metrics import (
     ensure_metrics_server,
@@ -35,7 +35,6 @@ from src.services.command_subscriber import CommandSubscriber
 from src.services.event_publisher import EventPublisher
 from src.services.fetcher_service import FetcherService
 from src.utils.correlation import CorrelationContext
-from src.core.retry import safe_operation
 
 
 class FetcherDaemon:
@@ -143,10 +142,12 @@ class FetcherDaemon:
         )
         self.running = False
 
-    async def _handle_fetch_command(
+    async def _handle_fetch_command(  # noqa: C901
         self, command: dict[str, Any]
-    ) -> None:  # noqa: C901,E501
-        """Handle fetch command from Redis with full tracing and error handling.
+    ) -> None:
+        """Handle fetch command from Redis with full tracing.
+
+        Includes detailed error handling and structured tracing metadata.
 
         Args:
             command: Command dict with fetch parameters
@@ -405,19 +406,20 @@ class FetcherDaemon:
         date: str,
         correlation_id: str,
     ) -> dict[str, Any]:
-        """Execute async operation using unified retry helper with hooks for metrics/logging."""
+        """Execute operation using unified retry helper.
+
+        Hooks for metrics/logging are invoked on retry/success/failure events.
+        """
         retried_flag = {"value": False}
 
         def on_retry(attempt: int, delay: float, exc: BaseException) -> None:
             # Count retry by reason and mark that success will be "after retry"
             retried_flag["value"] = True
             reason = type(exc).__name__.lower()
-            try:
+            with contextlib.suppress(Exception):
                 fetch_retries_total.labels(
                     chat=chat, date=date, reason=reason, worker=self.worker_id
                 ).inc()
-            except Exception:
-                pass
             self.logger.warning(
                 "Retrying operation",
                 extra={
@@ -433,15 +435,13 @@ class FetcherDaemon:
 
         def on_flood(wait_seconds: int, sleep_for: int) -> None:
             # Observe floodwait and increment retries counter
-            try:
+            with contextlib.suppress(Exception):
                 floodwait_wait_seconds.labels(
                     chat=chat, date=date, worker=self.worker_id
                 ).observe(wait_seconds)
                 fetch_retries_total.labels(
                     chat=chat, date=date, reason="floodwait", worker=self.worker_id
                 ).inc()
-            except Exception:
-                pass
             self.logger.warning(
                 "FloodWait encountered, sleeping",
                 extra={
@@ -486,19 +486,25 @@ class FetcherDaemon:
             ).inc()
             raise
 
-        # On success, record messages and if there were retries, a synthetic success_after_retry
+        # On success, record messages
+        # If there were retries, add a synthetic success_after_retry
         try:
+            result_typed = cast(dict[str, Any], result)
             fetch_messages_total.labels(
                 chat=chat, date=date, worker=self.worker_id
-            ).inc(result.get("message_count", 0))
+            ).inc(result_typed.get("message_count", 0))
             if retried_flag["value"]:
-                fetch_retries_total.labels(
-                    chat=chat, date=date, reason="success_after_retry", worker=self.worker_id
-                ).inc()
+                with contextlib.suppress(Exception):
+                    fetch_retries_total.labels(
+                        chat=chat,
+                        date=date,
+                        reason="success_after_retry",
+                        worker=self.worker_id,
+                    ).inc()
         except Exception:
             pass
 
-        return result
+        return result_typed
 
 
 async def main() -> int:
